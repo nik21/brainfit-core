@@ -1,0 +1,7 @@
+--- %YAML:1.0
+
+CONFIG_VERSION: 'production 2013-11-17 09:37'
+
+MYSQL:
+ servers: #You can use the "p:" to create a persistent connection
+  main: {server: 192.168.11.21, login: root, password: 12345, db: sampledb}

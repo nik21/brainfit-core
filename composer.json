@@ -1,0 +1,58 @@
+{
+    "name": "pilat/brainfit-core",
+    "authors": [
+        {
+            "name": "Vladimir Urushev",
+            "email": "urushev@yandex.ru"
+        }
+    ],
+    "description": "Brainfit Core",
+    "type": "project",
+    "version": "1.0.0",
+    "require": {
+        "php":">=5.5.0",
+        "ext-mysqli": "*",
+        "ext-memcached": "*",
+        "ext-apcu": "*",
+        "ext-redis": "*",
+
+        "smarty/smarty": "dev-master",
+        "fabpot/yaml": "1.0.6",
+        "react/react": "0.4.*"
+    },
+
+    "autoload": {
+        "classmap": [
+            "engine/"
+        ]
+    },
+
+    "config":{
+        "process-timeout":2400
+    },
+
+    "repositories":[
+        {
+            "type": "git",
+            "url": "https://github.com/pilat/smarty"
+        },
+        {
+            "type": "package",
+            "package": {
+                "name": "fabpot/yaml",
+                "version": "1.0.6",
+                "autoload": {
+                    "psr-0": {
+                        "sfYaml": "lib/"
+                    }
+                },
+                "dist": {
+                    "type": "zip",
+                    "url": "https://github.com/fabpot/yaml/zipball/8a266aadce"
+                }
+            }
+        }
+    ],
+
+    "target-dir": "../"
+}

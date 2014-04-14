@@ -1,0 +1,24 @@
+--- %YAML:1.0
+
+CONFIG_VERSION: 'default 2013-11-17 09:37'
+
+MYSQL:
+ switchToUTF8: true
+ servers: #You can use the "p:" to create a persistent connection
+  main: {server: 192.168.1.1, login: root, password: 12345, db: sampledb}
+
+MEMCACHED:
+ servers:
+  - [127.0.0.1, 11211, 10]
+
+ROUTING:
+ Route:
+  class: Pages\PageMain
+  regexp: ^index.php|^$
+  frame: 'admin_general'
+  template: 'admin_main'
+
+PROJECT:
+
+ #Trusted internal network or server cluster, separated by commas. You can write any number of octets
+ INTERNAL_NETWORKS: [127.0.0.1, 192.168.56.]
