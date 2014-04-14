@@ -1,5 +1,5 @@
 <?php
-namespace Model;
+namespace Brainfit\Model;
 
 class Exception extends \Exception
 {

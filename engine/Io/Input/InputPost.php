@@ -1,11 +1,11 @@
 <?php
-namespace Io\Input;
+namespace Brainfit\Io\Input;
 
-use Model\Exception;
-use Util\Reflection\Singleton;
-use Util\Strings;
+use Brainfit\Model\Exception;
+use Brainfit\Util\Reflection\Singleton;
+use Brainfit\Util\Strings;
 
-class Post implements InputInterface
+class InputPost implements InputInterface
 {
     use Singleton;
 
@@ -15,7 +15,7 @@ class Post implements InputInterface
 
     public function getPath($element = null)
     {
-        throw new Exception('You should use the class "Router"');
+        throw new Exception('You should use the class "InputRouter"');
     }
 
     function __construct()

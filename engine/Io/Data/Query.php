@@ -1,8 +1,9 @@
 <?php
-namespace Io\Data;
+namespace Brainfit\Io\Data;
 
-use Model\Exception;
-use Util\Debugger;
+use Brainfit\Model\Exception;
+use Brainfit\Settings;
+use Brainfit\Util\Debugger;
 
 /**
  * Class Query
@@ -12,12 +13,12 @@ class Query extends Sql
 {
     public function __construct($sServerName = 'main')
     {
-        $sServer = \Settings::get('MYSQL', 'servers', $sServerName, 'server');
-        $sUser = \Settings::get('MYSQL', 'servers', $sServerName, 'login');
-        $sPassword = \Settings::get('MYSQL', 'servers', $sServerName, 'password');
-        $sDefaultDb = \Settings::get('MYSQL', 'servers', $sServerName, 'db');
+        $sServer = Settings::get('MYSQL', 'servers', $sServerName, 'server');
+        $sUser = Settings::get('MYSQL', 'servers', $sServerName, 'login');
+        $sPassword = Settings::get('MYSQL', 'servers', $sServerName, 'password');
+        $sDefaultDb = Settings::get('MYSQL', 'servers', $sServerName, 'db');
 
-        parent::__construct($sServer, $sUser, $sPassword, $sDefaultDb, \Settings::get('MYSQL', 'switchToUTF8'));
+        parent::__construct($sServer, $sUser, $sPassword, $sDefaultDb, Settings::get('MYSQL', 'switchToUTF8'));
     }
 
 

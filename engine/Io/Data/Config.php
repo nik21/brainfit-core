@@ -1,6 +1,8 @@
 <?php
 
-namespace Io\Data;
+namespace Brainfit\Io\Data;
+
+use Brainfit\Model\Exception;
 
 class Config
 {
@@ -8,16 +10,19 @@ class Config
 
     private static $aConfig;
 
-    public static function get($sIdentificator, $sFile1 = '', $sFile2 = '', $sFileN = '')
+    public static function get($aFiles)
     {
-        $aFiles = array();
-        for($i = 1; $i < func_num_args(); $i++)
-            $aFiles[] = func_get_arg($i);
+        $sIdentificator = '';
+        foreach($aFiles as $sFilename)
+        {
+            $sMd5 = md5_file($sFilename);
+            if (!$sMd5)
+                throw new Exception('Invalid MD5 checksum for file '.$sFilename);
 
-        if($sIdentificator === false)
-            return self::getConfig($aFiles);
+            $sIdentificator .= $sMd5.'+';
+        }
 
-        $sIdentificator = self::KEY.$sIdentificator;
+        $sIdentificator = self::KEY.sha1($sIdentificator);
 
         if(isset(self::$aConfig[$sIdentificator]))
             return self::$aConfig[$sIdentificator];

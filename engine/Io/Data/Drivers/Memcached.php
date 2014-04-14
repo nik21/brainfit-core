@@ -1,7 +1,9 @@
 <?php
-namespace Io\Data\Drivers;
+namespace Brainfit\Io\Data\Drivers;
 
-use Util\Reflection\Singleton;
+use Brainfit\Model\Exception;
+use Brainfit\Settings;
+use Brainfit\Util\Reflection\Singleton;
 
 class Memcached
 {
@@ -16,7 +18,9 @@ class Memcached
 
     function __construct()
     {
-        $aServers = \Settings::getMemcachedServers();
+        $aServers = (array)Settings::get('MEMCACHED', 'servers');
+        if (!$aServers)
+            throw new Exception('Empty memcached servers config');
 
         $this->obMemcached = new \Memcached();
 
@@ -58,14 +62,14 @@ class Memcached
 
         return Pinba::timer_start(array(
             'group' => 'methods',
-            'server' => \Server::SERVER_UNIQUE_NAME,
+            'server' => Settings::get('SERVER', 'SERVER_UNIQUE_NAME'),
             'method' => '_memcached.'.$method
         ));
     }
 
     private function hash($key)
     {
-        return \Server::API_MEMCACHE_KEY.'%'.hash('sha512', $key);
+        return Settings::get('SERVER', 'API_MEMCACHE_KEY').'%'.hash('sha512', $key);
     }
 
     public function set($key, $var, $flag = 0, $expire = 0)

@@ -1,13 +1,13 @@
 <?php
-namespace Controller;
+namespace Brainfit\Controller;
 
-use Io\Input\InputInterface;
-use Io\Output\OutputInterface;
+use Brainfit\Io\Input\InputInterface;
+use Brainfit\Io\Output\OutputInterface;
 
 interface PageInterface
 {
     /**
-     * @param \Io\Input\InputInterface $obObInput
+     * @param InputInterface $obObInput
      * @return mixed
      */
     public function init(InputInterface $obObInput);

@@ -1,6 +1,6 @@
 <?php
 
-namespace Framework;
+namespace Brainfit\Framework;
 
 class Loader
 {
@@ -32,9 +32,3 @@ class Loader
         return $sFileName;
     }
 }
-
-//If Loader used PHPUnit and ROOT is not installed
-if(!defined('ROOT'))
-    define('ROOT', getcwd().'/');
-
-spl_autoload_register('\Framework\Loader::autoload');

@@ -1,27 +1,9 @@
 <?php
 
-namespace Util;
+namespace Brainfit\Io\Output\SmartyPlugins;
 
-class SmartyPlugins
+class SmartyMainPlugins
 {
-    static protected $obInstance;
-
-    public static function register(\Smarty $obSmarty)
-    {
-        if(is_null(self::$obInstance))
-            self::$obInstance = new self();
-
-        foreach(get_class_methods(self::$obInstance) as $sFunctionName)
-        {
-            list($sPrefix, $sType, $sName) = explode('_', $sFunctionName);
-
-            if($sPrefix != 'smarty')
-                continue;
-
-            $obSmarty->registerPlugin($sType, $sName, array(__CLASS__, $sFunctionName));
-        }
-    }
-
     public static function smarty_modifier_mb_truncate($string, $length = 80, $etc = '...', $charset = 'UTF-8',
                                                        $break_words = false, $middle = false)
     {

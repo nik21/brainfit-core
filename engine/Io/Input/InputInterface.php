@@ -1,5 +1,5 @@
 <?php
-namespace Io\Input;
+namespace Brainfit\Io\Input;
 
 const VALIDATOR_STRING = 1;
 const VALIDATOR_INTEGER = 2;

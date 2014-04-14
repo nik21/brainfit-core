@@ -22,9 +22,9 @@
     },
 
     "autoload": {
-        "classmap": [
-            "engine/"
-        ]
+        "psr-4": {
+            "Brainfit\\": "engine"
+        }
     },
 
     "config":{

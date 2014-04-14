@@ -1,24 +1,28 @@
 <?php
 
+namespace Brainfit;
+
+use Brainfit\Io\Data\Config;
+use Brainfit\Model\Exception;
+
 class Settings
 {
-    public static function getMemcachedServers()
+    private static $aConfigurationFiles = null;
+
+    public static function loadConfiguration($aConfigurationFiles)
     {
-        $aRet = self::get('MEMCACHED', 'servers');
+        if (!is_null(self::$aConfigurationFiles))
+            throw new Exception('Configuration already loaded');
 
-        if (!$aRet || !$aRet[0][0])
-            throw new \Model\Exception('Not specified memcached-cluster servers');
-
-        return (array)$aRet;
+        self::$aConfigurationFiles = $aConfigurationFiles;
     }
 
     public static function get()
     {
-        $ret = \Io\Data\Config::get(
-            md5_file(ROOT.'config/default.yml').'+'.md5_file(ROOT.\Server::CUSTOM_CONFIGURATION),
-            ROOT.'config/default.yml',
-            ROOT.\Server::CUSTOM_CONFIGURATION
-        );
+        if (is_null(self::$aConfigurationFiles))
+            throw new Exception('Configuration not loaded');
+
+        $ret = Config::get(self::$aConfigurationFiles);
 
         //TODO: should be optimized
         $iNumArgs = func_num_args();

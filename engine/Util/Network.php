@@ -1,7 +1,8 @@
 <?php
-namespace Util;
+namespace Brainfit\Util;
 
-use Model\Exception;
+use Brainfit\Model\Exception;
+use Brainfit\Settings;
 
 class Network
 {
@@ -13,7 +14,7 @@ class Network
      * @param $sIpAddress - full IP-address
      * @param $sMask - Subnet mask. Can be expressed as 255.255.255.0 or "C" or "24"
      *
-     * @throws \Model\Exception
+     * @throws Exception
      * @return string
      */
     public static function applyNetMask($sIpAddress, $sMask)
@@ -31,12 +32,12 @@ class Network
      * Whether the address to the list of servers in the cluster, you can trust him?
      * @param $ip
      *
-     * @throws \Model\Exception
+     * @throws Exception
      * @return bool
      */
     public static function isTrustInternalAddress($ip)
     {
-        $aNetworks = (array)\Settings::get('PROJECT', 'INTERNAL_NETWORKS');
+        $aNetworks = (array)Settings::get('PROJECT', 'INTERNAL_NETWORKS');
         if(!$aNetworks)
             throw new Exception('Not specified for the project INTERNAL_NETWORKS');
 

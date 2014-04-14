@@ -6,7 +6,7 @@
  * Time: 7:58
  */
 
-namespace Io\Data;
+namespace Brainfit\Io\Data;
 
 class StorageTestProvider extends Storage
 {

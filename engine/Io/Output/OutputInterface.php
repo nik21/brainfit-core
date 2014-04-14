@@ -1,5 +1,5 @@
 <?php
-namespace Io\Output;
+namespace Brainfit\Io\Output;
 
 interface OutputInterface
 {

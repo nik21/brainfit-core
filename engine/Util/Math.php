@@ -1,5 +1,5 @@
 <?php
-namespace Util;
+namespace Brainfit\Util;
 
 class Math
 {
@@ -37,8 +37,8 @@ class Math
         if(!$dc)
             return false;
 
-        $intervalo = date_diff($dcn, $dc);
-        $out = @$intervalo->format("Years:%Y,Months:%M,Days:%d,Hours:%H,Minutes:%i,Seconds:%s");
+        $obInterval = date_diff($dcn, $dc);
+        $out = @$obInterval->format("Years:%Y,Months:%M,Days:%d,Hours:%H,Minutes:%i,Seconds:%s");
 
         $a_out = array();
         $a = explode(',', $out);

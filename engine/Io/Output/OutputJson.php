@@ -1,9 +1,9 @@
 <?php
-namespace Io\Output;
+namespace Brainfit\Io\Output;
 
-use Util\Reflection\Singleton;
+use Brainfit\Util\Reflection\Singleton;
 
-class Json implements OutputInterface
+class OutputJson implements OutputInterface
 {
     use Singleton;
 

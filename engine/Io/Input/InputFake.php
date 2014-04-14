@@ -1,9 +1,9 @@
 <?php
-namespace Io\Input;
+namespace Brainfit\Io\Input;
 
-use Util\Reflection\Singleton;
+use Brainfit\Util\Reflection\Singleton;
 
-class Fake extends Post implements InputInterface
+class InputFake extends InputPost implements InputInterface
 {
     use Singleton;
 

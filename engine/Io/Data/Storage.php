@@ -1,8 +1,8 @@
 <?php
-namespace Io\Data;
+namespace Brainfit\Io\Data;
 
-use Io\Data\Drivers\Redis;
-use Model\Exception;
+use Brainfit\Io\Data\Drivers\Redis;
+use Brainfit\Model\Exception;
 
 /**
  * Надсройка над драйвером phpredis
@@ -430,7 +430,7 @@ abstract class Storage
     /**
      * @param int $iState - 1 -- start, 2 -- commit, 3 - ручная отмена. Неудачный коммит и так не запишет
      *
-     * @throws \Model\Exception
+     * @throws Exception
      * @return bool|\Redis|void
      */
     public function transaction($iState)
@@ -524,7 +524,7 @@ abstract class Storage
      * @param $sIndexValue
      * @param int $iTTL
      *
-     * @throws \Model\Exception
+     * @throws Exception
      */
     public function createIndex($sIndexName, $sIndexType, $sIndexValue, $iTTL = 0)
     {

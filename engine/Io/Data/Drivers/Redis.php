@@ -1,6 +1,6 @@
 <?php
 
-namespace Io\Data\Drivers;
+namespace Brainfit\Io\Data\Drivers;
 
 /**
  * Class Redis

@@ -1,7 +1,8 @@
 <?php
-namespace Util;
+namespace Brainfit\Util;
 
-use Model\Exception;
+use Brainfit\Model\Exception;
+use Brainfit\Settings;
 
 class SignChecker
 {
@@ -9,7 +10,7 @@ class SignChecker
 
     public static function createSign($sData)
     {
-        $sPrivateKeyFilename = \Settings::get('ENCRYPTION', 'privateKey');
+        $sPrivateKeyFilename = Settings::get('ENCRYPTION', 'privateKey');
         if(!$sPrivateKeyFilename || !file_exists(ROOT.$sPrivateKeyFilename))
             throw new Exception('In the configuration file is not specified with a private key');
 
@@ -32,7 +33,7 @@ class SignChecker
 
     public static function verifySign($sData, $sSign)
     {
-        $sPublicKeyFilename = \Settings::get('ENCRYPTION', 'publicKey');
+        $sPublicKeyFilename = Settings::get('ENCRYPTION', 'publicKey');
         if(!$sPublicKeyFilename || !file_exists(ROOT.$sPublicKeyFilename))
             throw new Exception('In the configuration file is not specified with the public key');
 

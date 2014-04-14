@@ -1,5 +1,6 @@
 <?php
-namespace Io\Data\Drivers;
+namespace Brainfit\Io\Data\Drivers;
+use Brainfit\Settings;
 
 /**
  * see http://pinba.org/wiki/Manual:PHP_extension#pinba_timer_start.28.29
@@ -8,7 +9,7 @@ class Pinba
 {
     public static function timer_start($tags)
     {
-        if(!\Server::PINBA_ENABLED)
+        if(!Settings::get('SERVER', 'PINBA_ENABLED'))
             return false;
 
         return pinba_timer_start($tags);
@@ -16,7 +17,7 @@ class Pinba
 
     public static function timer_stop($obInstance)
     {
-        if($obInstance === false || !\Server::PINBA_ENABLED)
+        if($obInstance === false || !Settings::get('SERVER', 'PINBA_ENABLED'))
             return false;
 
         pinba_timer_stop($obInstance);

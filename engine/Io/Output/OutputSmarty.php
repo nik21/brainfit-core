@@ -1,10 +1,10 @@
 <?php
-namespace Io\Output;
+namespace Brainfit\Io\Output;
 
-use Util\Reflection\Singleton;
-use Util\SmartyPlugins;
+use Brainfit\Io\Output\SmartyPlugins\SmartyMainPlugins;
+use Brainfit\Util\Reflection\Singleton;
 
-class Smarty implements OutputInterface
+class OutputSmarty implements OutputInterface
 {
     use Singleton;
 
@@ -14,16 +14,29 @@ class Smarty implements OutputInterface
 
     private $cache;
 
-    function __construct()
+    public function __construct()
     {
         $this->smarty = new \Smarty();
-        SmartyPlugins::register($this->smarty);
+        $this->addPlugin(new SmartyMainPlugins());
 
         $this->smarty->setCacheDir(ROOT.'/cache/smarty/cache/');
         $this->smarty->setCompileDir(ROOT.'/cache/smarty/compile/');
         $this->smarty->setTemplateDir(ROOT.'templates/');
 
         $this->smarty->error_reporting = E_ALL ^ E_NOTICE; // E_ALL; // LEAVE E_ALL DURING DEVELOPMENT
+    }
+
+    public function addPlugin($obSmartyPluginClass)
+    {
+        foreach(get_class_methods($obSmartyPluginClass) as $sFunctionName)
+        {
+            list($sPrefix, $sType, $sName) = explode('_', $sFunctionName);
+
+            if($sPrefix != 'smarty')
+                continue;
+
+            $this->smarty->registerPlugin($sType, $sName, [$obSmartyPluginClass, $sFunctionName]);
+        }
     }
 
     public function assign($name, $value = null)
@@ -70,7 +83,6 @@ class Smarty implements OutputInterface
     {
         $this->corrector();
 
-        $this->smarty->caching = $this->cache > 0 && \Server::PRODUCTION_MODE;
         $this->smarty->cache_lifetime = (int)$this->cache;
 
         if($this->displayTemplate)

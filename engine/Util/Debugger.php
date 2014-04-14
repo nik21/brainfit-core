@@ -1,5 +1,5 @@
 <?php
-namespace Util;
+namespace Brainfit\Util;
 
 class Debugger
 {

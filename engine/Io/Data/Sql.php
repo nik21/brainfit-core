@@ -1,9 +1,11 @@
 <?php
-namespace Io\Data;
+namespace Brainfit\Io\Data;
 
 //TODO: We refactored this class
 
-use Io\Data\Drivers\Memcached;
+use Brainfit\Io\Data\Drivers\Memcached;
+use Brainfit\Model\Exception;
+use Brainfit\Util\Debugger;
 
 class Sql implements DataInterface
 {
@@ -40,7 +42,7 @@ class Sql implements DataInterface
         $this->mysqli = new \mysqli($this->server, $this->user, $this->password, $this->defaultDb);
 
         if(mysqli_connect_errno())
-            throw new \Model\Exception('Невозможно работать с sql: '.mysqli_connect_error().', '
+            throw new Exception('Невозможно работать с sql: '.mysqli_connect_error().', '
                 .mysqli_connect_errno(), 0);
 
         if($this->useUtf8)
@@ -53,7 +55,7 @@ class Sql implements DataInterface
 
         if($cache_time)
         {
-            $memcache = \Io\Data\Drivers\Memcached::getInstance();
+            $memcache = Memcached::getInstance();
             $sha1 = sha1($ColumnName.$TableName.$CriteriaColumn.$CriteriaCondition);
 
             $ret = $memcache->get("FO_DBLkup_{$sha1}");
@@ -431,10 +433,10 @@ class Sql implements DataInterface
                 return $result1;
             }
 
-        } catch(\Model\Exception $e)
+        } catch(Exception $e)
         {
             $err = $e;
-            \Util\Debugger::log("SQL Error: $err");
+            Debugger::log("SQL Error: $err");
         }
 
         return false;
@@ -459,10 +461,10 @@ class Sql implements DataInterface
                     WHERE `{$criteriaField}` = '{$criteria}'",
                 true
             );
-        } catch(\Model\Exception $e)
+        } catch(Exception $e)
         {
             $err = $e;
-            \Util\Debugger::log("SQL Error: $err");
+            Debugger::log("SQL Error: $err");
         }
 
         $result1 = $this->mysqli->affected_rows;
@@ -724,8 +726,8 @@ class Sql implements DataInterface
         else
         {
             $err = "MySQL error {$this->mysqli->error} <br> Query:<br> {$strSQLQuery}";
-            \Util\Debugger::log($err);
-            throw new \Model\Exception($err, $this->mysqli->errno);
+            Debugger::log($err);
+            throw new Exception($err, $this->mysqli->errno);
         }
 
         //if ($GLOBALS['prev']) $GLOBALS['profiler'][0] += intval((microtime(true)-$GLOBALS['prev'])*1000);

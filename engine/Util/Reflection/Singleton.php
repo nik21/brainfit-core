@@ -1,5 +1,5 @@
 <?php
-namespace Util\Reflection;
+namespace Brainfit\Util\Reflection;
 
 trait Singleton
 {

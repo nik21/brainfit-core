@@ -1,5 +1,5 @@
 <?php
-namespace Io\Data;
+namespace Brainfit\Io\Data;
 
 interface DataInterface
 {
