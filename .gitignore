@@ -5,8 +5,6 @@ logs/
 
 /nbproject/
 Server.php
-/engine/Server.php
-engine/Server.php
 /vendor/
 /composer.lock
 node_modules/
