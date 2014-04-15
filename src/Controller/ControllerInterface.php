@@ -4,7 +4,7 @@ namespace Brainfit\Controller;
 use Brainfit\Io\Input\InputInterface;
 use Brainfit\Io\Output\OutputInterface;
 
-interface PageInterface
+interface ControllerInterface
 {
     /**
      * @param InputInterface $obObInput
