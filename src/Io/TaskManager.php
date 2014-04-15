@@ -80,8 +80,12 @@ class TaskManager
             throw new Exception('Error: '.$errstr, $errno);
 
         //Send data
-        for($i = 0; $i <= strlen($data); $i += 512)
+        for($i = 0; $i <= strlen($data)-512; $i += 512)
             fwrite($fp, substr($data, $i, 512), 512);
+
+        if ($iLastBlock = strlen($data)-$i)
+            fwrite($fp, substr($data, $i, $iLastBlock), $iLastBlock);
+
 
         //Not waiting for an answer
         fclose($fp);

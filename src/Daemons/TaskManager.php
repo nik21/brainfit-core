@@ -43,7 +43,7 @@ class TaskManager
         list($empty, $sHashSum, $sRawData) = self::parseTaskHeader(self::readStdinData());
 
         if(md5($sRawData) != $sHashSum)
-            throw new Exception('Child: Invalid header on request: '.$sRawData."\n");
+            throw new Exception('Child: Invalid header on request: '.$sHashSum. ' != '.md5($sRawData)."\n");
 
         //Разбираем данные
         $aData = json_decode($sRawData, true);
@@ -95,7 +95,7 @@ class TaskManager
             if(!$iLength)
                 throw new Exception('Invalid data header');
             else
-                $iLength += 32;
+                $iLength += 40; //32 md5 and 8 — header length
 
             if(strlen($sData) >= $iLength)
                 break;
@@ -238,8 +238,11 @@ class TaskManager
 
             echo "{$sPid}\tBegin new process\n";
 
-            for($i = 0; $i <= strlen($sData); $i += 512)
+            for($i = 0; $i <= strlen($sData)-512; $i += 512)
                 $process->stdin->write(substr($sData, $i, 512));
+
+            if ($iLastBlock = strlen($sData)-$i)
+                $process->stdin->write(substr($sData, $i, $iLastBlock), $iLastBlock);
 
             $process->stdin->end();
 
