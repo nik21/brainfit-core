@@ -76,7 +76,7 @@ class TaskManager
         while(-1)
         {
             $sLine = self::getBlock($iBlockSize);
-            
+
             $iReadSize += $iBlockSize;
 
             if (is_null($sData) && strlen($sLine) <= 8)

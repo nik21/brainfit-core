@@ -28,12 +28,16 @@ class ProcessManager
         $p = proc_open($cmd, $descriptors, $pipes);
         $status = null;
 
+        $iExitCode = 0;
         while (true) {
             sleep(1);
 
             $status = proc_get_status($p);
             if (!$status['running'])
+            {
+                $iExitCode = (int)$status['exitcode'];
                 break;
+            }
 
             //_log('Stell run. Child process pid:', $status['pid']);
         }
@@ -50,5 +54,7 @@ class ProcessManager
 
             unlink($sLogfile);
         }
+
+        return $iExitCode;
     }
 }
