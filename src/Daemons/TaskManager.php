@@ -73,8 +73,10 @@ class TaskManager
         $iReadSize = 0;
 
         //Read as there are data
-        foreach(self::getBlock($iBlockSize) as $sLine)
+        while(-1)
         {
+            $sLine = self::getBlock($iBlockSize);
+            
             $iReadSize += $iBlockSize;
 
             if (is_null($sData) && strlen($sLine) <= 8)
@@ -108,8 +110,7 @@ class TaskManager
         if ($iBlockSize <= 0)
             throw new Exception('getBlock error');
 
-        while(-1)
-            yield fread(STDIN, $iBlockSize);
+        return fread(STDIN, $iBlockSize);
     }
 
 
