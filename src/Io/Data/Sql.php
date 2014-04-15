@@ -418,7 +418,7 @@ class Sql implements DataInterface
             );
 
 
-            if($getInsertId && !$update)
+            if($getInsertId)// && !$update)
             { //При update даже если произошел первичный insert вернется affected_rows!
                 $ret = $this->mysqli->insert_id;
                 $this->free();
