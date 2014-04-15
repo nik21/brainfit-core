@@ -9,7 +9,7 @@ class TaskManager
 {
     private $sHost = '127.0.0.1';
     private $iPort = 4000;
-
+    private $aProcesses = array();
     private $sCwd = null;
 
     /**
@@ -27,12 +27,12 @@ class TaskManager
         $this->iPort = (int)$aOptions['p'];
         $bClientMode = (bool)$aOptions['c'];
 
-        if (!$this->sHost)
+        if(!$this->sHost)
             $this->sHost = '127.0.0.1';
-        if (!$this->iPort)
+        if(!$this->iPort)
             $this->iPort = 4000;
 
-        if ($bClientMode)
+        if($bClientMode)
             $this->executeChildMode();
         else
             $this->executeMaster();
@@ -42,7 +42,7 @@ class TaskManager
     {
         list($empty, $sHashSum, $sRawData) = self::parseTaskHeader(self::readStdinData());
 
-        if (md5($sRawData) != $sHashSum)
+        if(md5($sRawData) != $sHashSum)
             throw new Exception('Child: Invalid header on request: '.$sRawData."\n");
 
         //Разбираем данные
@@ -51,11 +51,11 @@ class TaskManager
         $aParams = (array)$aData['params'];
         $sMethod = (string)$aData['method'];
 
-        if (!$sTaskId || !$sMethod)
+        if(!$sTaskId || !$sMethod)
             throw new Exception('The task does not contain data: '.$sRawData);
 
         //Ip alreade needed
-        if (!isset($aParams['ip']))
+        if(!isset($aParams['ip']))
             $aParams['ip'] = '127.0.0.1';
 
         //Execute API method
@@ -79,25 +79,25 @@ class TaskManager
 
             $iReadSize += $iBlockSize;
 
-            if (is_null($sData) && strlen($sLine) <= 8)
+            if(is_null($sData) && strlen($sLine) <= 8)
                 throw new Exception('Very small header');
 
-            if ($iReadSize >= 16*1024*1024)
+            if($iReadSize >= 16 * 1024 * 1024)
                 throw new Exception('Too much data: >16Mb');
 
-            if (is_null($sData))
+            if(is_null($sData))
                 $sData = '';
 
             $sData .= $sLine;
 
 
             $iLength = (int)substr($sData, 0, 8);
-            if (!$iLength)
+            if(!$iLength)
                 throw new Exception('Invalid data header');
             else
                 $iLength += 32;
 
-            if (strlen($sData) >= $iLength)
+            if(strlen($sData) >= $iLength)
                 break;
         }
 
@@ -107,19 +107,18 @@ class TaskManager
     private static function getBlock($iBlockSize)
     {
         $iBlockSize = (int)$iBlockSize;
-        if ($iBlockSize <= 0)
+        if($iBlockSize <= 0)
             throw new Exception('getBlock error');
 
         return fread(STDIN, $iBlockSize);
     }
 
 
-
     ////
     private static function parseTaskHeader($sData)
     {
         $iLength = (int)substr($sData, 0, 8);
-        $sHashSum = substr($sData, 8+$iLength, 32);
+        $sHashSum = substr($sData, 8 + $iLength, 32);
         $sRawData = substr($sData, 8, $iLength);
 
         return [$iLength, $sHashSum, $sRawData];
@@ -133,40 +132,64 @@ class TaskManager
 
         $conns = new \SplObjectStorage();
 
-        $socket->on('connection', function ($conn) use ($conns, $loop) {
+        $socket->on('connection', function ($conn) use ($conns, $loop)
+        {
             //$conns->attach($conn);
 
             $sConcatData = '';
-            $conn->on('data', function ($sData) use (&$sConcatData) {
+            $conn->on('data', function ($sData) use (&$sConcatData)
+            {
                 $sConcatData .= $sData;
             });
 
-            $conn->on('end', function () use ($conns, $conn, &$sConcatData, $loop) {
+            $conn->on('end', function () use ($conns, $conn, &$sConcatData, $loop)
+            {
                 //$data containts:
                 //data size (json-string) in dec value (8 bytes)
-                //JSON-object with fields "id", "params", "method"
+                //JSON-object with fields "id", "params", "method" or "id", "action"
                 //md5 checksum of JSON
 
                 //Check signature
                 list($empty, $sHashSum, $sRawData) = self::parseTaskHeader($sConcatData);
 
-                if (md5($sRawData) != $sHashSum)
+                if(md5($sRawData) != $sHashSum)
+                {
                     fwrite(STDERR, 'Invalid header on request: '.$sRawData."\n");
+
+                    return;
+                }
+
+                $aData = json_decode($sRawData, true);
+                $sTaskId = trim($aData['id']);
+
+                if(!$sTaskId)
+                {
+                    fwrite(STDERR, 'Invalid task id: '.$sRawData."\n");
+
+                    return;
+                }
+
+                $sTaskId = sha1($sTaskId);
+
+                if($aData['action'] == 'kill')
+                    $this->killProcess($sTaskId);
+                elseif($aData['action'] == 'check')
+                    $this->checkProcess($sTaskId);
                 else
-                    $this->createProcess($loop, $sConcatData);
+                    $this->createProcess($loop, $sConcatData, $sTaskId);
 
                 //$conns->detach($conn);
             });
 
             /**
              * foreach ($conns as $current) {
-            if ($conn === $current) {
-            continue;
-            }
-
-            $current->write($conn->getRemoteAddress().': ');
-            $current->write($sData);
-            }
+             * if ($conn === $current) {
+             * continue;
+             * }
+             *
+             * $current->write($conn->getRemoteAddress().': ');
+             * $current->write($sData);
+             * }
              */
         });
 
@@ -177,42 +200,60 @@ class TaskManager
         $loop->run();
     }
 
-    private function createProcess($loop, $sData)
+    private function checkProcess($sTaskId)
+    {
+        return isset($this->aProcesses[$sTaskId]);
+    }
+
+    private function killProcess($sTaskId)
+    {
+        if(!isset($this->aProcesses[$sTaskId]))
+            return false;
+
+        $this->aProcesses[$sTaskId]->close();
+        unset($this->aProcesses[$sTaskId]);
+
+        return true;
+    }
+
+    private function createProcess($loop, $sData, $sTaskId)
     {
         //Now create the process and pass it on STDIN data
         $process = new \React\ChildProcess\Process('php daemon.php -c 1', $this->sCwd);
 
         $sPid = 'Unknown';
 
-        $process->on('exit', function($exitCode, $termSignal) use (&$sPid) {
+        $process->on('exit', function ($exitCode, $termSignal) use (&$sPid, &$sTaskId)
+        {
+            unset($this->aProcesses[$sTaskId]);
+
             echo "{$sPid}\tChild exit\n";
         });
 
-        $loop->addTimer(0.001, function($timer) use ($process, &$sPid, &$sData) {
+        $loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$sData, &$sTaskId)
+        {
             $process->start($timer->getLoop());
             $sPid = $process->getPid();
+            $this->aProcesses[$sTaskId] = $process;
+
             echo "{$sPid}\tBegin new process\n";
 
-            for($i=0; $i<=strlen($sData); $i+=512)
+            for($i = 0; $i <= strlen($sData); $i += 512)
                 $process->stdin->write(substr($sData, $i, 512));
 
             $process->stdin->end();
 
-            $process->stdout->on('data', function($output) use($sPid) {
-                if ($output)
+            $process->stdout->on('data', function ($output) use ($sPid)
+            {
+                if($output)
                     echo "{$sPid}\tMessage from child: {$output}\n";
             });
 
-            $process->stderr->on('data', function($output) use($sPid) {
-                if ($output)
+            $process->stderr->on('data', function ($output) use ($sPid)
+            {
+                if($output)
                     echo "{$sPid}\tError from child: {$output}\n";
             });
         });
     }
-
 }
-
-
-
-
-
