@@ -24,6 +24,13 @@ class OutputSmarty implements OutputInterface
         $this->smarty->setTemplateDir(ROOT.'templates/');
 
         $this->smarty->error_reporting = error_reporting();
+        //$this->smarty->loadPlugin('smarty_modifier_escape');
+        $this->smarty->registerFilter('variable', [$this, 'aa']);
+    }
+
+    public function htmlEscapeReplacer($e)
+    {
+        return htmlspecialchars($e, ENT_NOQUOTES | ENT_HTML5);
     }
 
     public function addPlugin($obSmartyPluginClass)
