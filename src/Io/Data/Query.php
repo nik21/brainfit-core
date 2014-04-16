@@ -108,13 +108,13 @@ class Query extends Sql
 
         $value = & $this->aLoadedValues[$this->iPointer - 1];
 
-        if($params == '%i')
+        if($params[1] == '%i')
             return $this->escapeInt($value);
-        elseif($params == '%s')
+        elseif($params[1] == '%s')
             return $this->escapeString($value);
-        elseif($params == '%a')
+        elseif($params[1] == '%a')
             return $this->createIN($value);
-        elseif($params == '%w')
+        elseif($params[1] == '%w')
             return $value;
         else
             return '?';
@@ -135,12 +135,7 @@ class Query extends Sql
         for($i = 1; $i < func_num_args(); $i++)
             $this->aLoadedValues[] = func_get_arg($i);
 
-        $sVariable = preg_replace(
-            "/(%[siaw])/e",
-            //function($params) { return $params[1]; },
-            "\$this->variable_check2('\\1')",
-            $sVariable
-        );
+        $sVariable = preg_replace_callback("/(%[siaw])/", [$this, 'variable_check2'], $sVariable);
 
         $this->sWhere .= ($this->sWhere ? ' AND ' : '').'('.$sVariable.')';
 
@@ -164,12 +159,7 @@ class Query extends Sql
         for($i = 3; $i < func_num_args(); $i++)
             $this->aLoadedValues[] = func_get_arg($i);
 
-        $sVariable = preg_replace(
-            "/(%[siaw])/e",
-            //function($params) { return $params[1]; },
-            "\$this->variable_check2('\\1')",
-            $sVariable
-        );
+        $sVariable = preg_replace_callback("/(%[siaw])/", [$this, 'variable_check2'], $sVariable);
 
         $this->sJoins = $sDirection.' join '.$sTableName.' '.$sSuffix.' on '.$sVariable;
 
@@ -184,12 +174,7 @@ class Query extends Sql
         for($i = 1; $i < func_num_args(); $i++)
             $this->aLoadedValues[] = func_get_arg($i);
 
-        $sVariable = preg_replace(
-            "/(%[siaw])/e",
-            //function($params) { return $params[1]; },
-            "\$this->variable_check2('\\1')",
-            $sVariable
-        );
+        $sVariable = preg_replace_callback("/(%[siaw])/", [$this, 'variable_check2'], $sVariable);
 
         $this->sHaving .= ($this->sHaving ? ' AND ' : '').'('.$sVariable.')';
 

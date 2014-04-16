@@ -23,7 +23,7 @@ class OutputSmarty implements OutputInterface
         $this->smarty->setCompileDir(ROOT.'/cache/smarty/compile/');
         $this->smarty->setTemplateDir(ROOT.'templates/');
 
-        $this->smarty->error_reporting = E_ALL ^ E_NOTICE; // E_ALL; // LEAVE E_ALL DURING DEVELOPMENT
+        $this->smarty->error_reporting = error_reporting();
     }
 
     public function addPlugin($obSmartyPluginClass)
