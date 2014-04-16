@@ -25,7 +25,7 @@ class OutputSmarty implements OutputInterface
 
         $this->smarty->error_reporting = error_reporting();
         //$this->smarty->loadPlugin('smarty_modifier_escape');
-        $this->smarty->registerFilter('variable', [$this, 'aa']);
+        $this->smarty->registerFilter('variable', [$this, 'htmlEscapeReplacer']);
     }
 
     public function htmlEscapeReplacer($e)
