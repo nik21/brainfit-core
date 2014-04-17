@@ -1,10 +1,17 @@
 <?php
-namespace Brainfit\Daemons;
+namespace Brainfit\Util;
 
 use Brainfit\Api\MethodWrapper;
 use Brainfit\Io\Input\InputFake;
 use Brainfit\Model\Exception;
 
+/**
+ * Class TaskManager
+ * @package Brainfit\Util
+ *
+ * Process create new php-processes for run methods from Api/Method namesapces.
+ * Do this using doBackground method in /Brainfit/Io/TaskManager class
+ */
 class TaskManager
 {
     private $sHost = '127.0.0.1';
