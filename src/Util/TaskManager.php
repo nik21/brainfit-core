@@ -4,6 +4,7 @@ namespace Brainfit\Util;
 use Brainfit\Api\MethodWrapper;
 use Brainfit\Io\Input\InputFake;
 use Brainfit\Model\Exception;
+use Brainfit\Service\ServiceFactory;
 
 /**
  * Class TaskManager
@@ -18,6 +19,7 @@ class TaskManager
     private $iPort = 4000;
     private $aProcesses = array();
     private $sCwd = null;
+    private $loop;
 
     /**
      * @internal param h — host
@@ -39,10 +41,18 @@ class TaskManager
         if(!$this->iPort)
             $this->iPort = 4000;
 
+        $this->loop = \React\EventLoop\Factory::create();
+
         if($bClientMode)
             $this->executeChildMode();
         else
+        {
+            $this->shortTest();
+            $this->executeServiceMethods();
             $this->executeMaster();
+        }
+
+        $this->loop->run();
     }
 
     private function executeChildMode()
@@ -133,13 +143,11 @@ class TaskManager
 
     private function executeMaster()
     {
-        $loop = \React\EventLoop\Factory::create();
-
-        $socket = new \React\Socket\Server($loop);
+        $socket = new \React\Socket\Server($this->loop);
 
         $conns = new \SplObjectStorage();
 
-        $socket->on('connection', function ($conn) use ($conns, $loop)
+        $socket->on('connection', function ($conn) use ($conns)
         {
             //$conns->attach($conn);
 
@@ -149,7 +157,7 @@ class TaskManager
                 $sConcatData .= $sData;
             });
 
-            $conn->on('end', function () use ($conns, $conn, &$sConcatData, $loop)
+            $conn->on('end', function () use ($conns, $conn, &$sConcatData)
             {
                 //$data containts:
                 //data size (json-string) in dec value (8 bytes)
@@ -183,7 +191,7 @@ class TaskManager
                 elseif($aData['action'] == 'check')
                     $this->checkProcess($sTaskId);
                 else
-                    $this->createProcess($loop, $sConcatData, $sTaskId);
+                    $this->createProcess($sConcatData, $sTaskId);
 
                 //$conns->detach($conn);
             });
@@ -203,8 +211,6 @@ class TaskManager
         echo "Socket server listening on port {$this->iPort} host {$this->sHost}\n";
 
         $socket->listen($this->iPort, $this->sHost);
-
-        $loop->run();
     }
 
     private function checkProcess($sTaskId)
@@ -223,7 +229,7 @@ class TaskManager
         return true;
     }
 
-    private function createProcess($loop, $sData, $sTaskId)
+    private function createProcess($sData, $sTaskId)
     {
         //Now create the process and pass it on STDIN data
         $process = new \React\ChildProcess\Process('php daemon.php -c 1', $this->sCwd);
@@ -237,7 +243,7 @@ class TaskManager
             echo "{$sPid}\tChild exit\n";
         });
 
-        $loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$sData, &$sTaskId)
+        $this->loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$sData, &$sTaskId)
         {
             $process->start($timer->getLoop());
             $sPid = $process->getPid();
@@ -265,5 +271,36 @@ class TaskManager
                     echo "{$sPid}\tError from child: {$output}\n";
             });
         });
+    }
+
+    /**
+     * Scan "Service" folder and execute all methods
+     */
+    private function executeServiceMethods()
+    {
+        $aFiles = scandir(ROOT.'/engine/Service/');
+        foreach($aFiles as $sFile)
+        {
+            if ($sFile == '.' || $sFile == '..')
+                continue;
+
+            $sClassName = str_replace('.php', '', $sFile);
+            $obClass = ServiceFactory::create($sClassName);
+            $obClass->execute($this->loop);
+        }
+    }
+
+    private function shortTest()
+    {
+        $sProblem = '';
+
+        $aData = apc_cache_info();
+        if (!$aData['stime'])
+            $sProblem = "Need add \"apc.enabled_cli\" option\n";
+
+        if (!$sProblem)
+            return;
+
+        throw new Exception($sProblem);
     }
 }

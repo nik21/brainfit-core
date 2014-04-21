@@ -5,6 +5,8 @@ use Brainfit\Util\Debugger;
 
 class ProcessManager
 {
+    private static $aProcesses;
+
     public static function exec($cmd, $personalLogFilename = null, $iTimeout = 0)
     {
         if ($personalLogFilename)
@@ -56,5 +58,53 @@ class ProcessManager
         }
 
         return $iExitCode;
+    }
+
+
+    /////////////////////////////////////
+
+    public static function stop($sTaskId)
+    {
+        if (!self::isExist($sTaskId))
+            return;
+    }
+
+    public static function isExist($sTaskId)
+    {
+        return isset(self::$aProcesses[$sTaskId]);
+    }
+
+    public static function getProcess($sTaskId)
+    {
+        if (!self::isExist($sTaskId))
+            return false;
+
+        return self::$aProcesses[$sTaskId];
+    }
+
+    public static function createProcess($loop, $sCommand, $sTaskId, callable $callback = null)
+    {
+        //Now create the process and pass it on STDIN data
+        $process = new \React\ChildProcess\Process($sCommand);
+
+        $sPid = 'Unknown';
+
+        $process->on('exit', function ($exitCode, $termSignal) use (&$sPid, &$sTaskId)
+        {
+            unset(self::$aProcesses[$sTaskId]);
+        });
+
+        $loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$callback, &$sTaskId)
+        {
+            $process->start($timer->getLoop());
+            $sPid = $process->getPid();
+
+            if (!is_null($callback))
+                $callback($process);
+        });
+
+        self::$aProcesses[$sTaskId] = $process;
+
+        return $process;
     }
 }
