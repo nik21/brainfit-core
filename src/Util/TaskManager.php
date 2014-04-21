@@ -296,7 +296,7 @@ class TaskManager
 
         $aData = apc_cache_info();
         if (!$aData['stime'])
-            $sProblem = "Need add \"apc.enabled_cli\" option\n";
+            $sProblem = "Need add \"apc.enable_cli\" option\n";
 
         if (!$sProblem)
             return;
