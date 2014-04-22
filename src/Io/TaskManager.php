@@ -6,14 +6,14 @@ use Brainfit\Model\Exception;
 
 class TaskManager
 {
-    public static function doBackground($sJobName, $sWorkload, $sServer = null, $sUniqueId = null, $iTimeout = 10)
+    public static function doBackground($sJobName, $workload, $sServer = null, $sUniqueId = null, $iTimeout = 10)
     {
         $sUniqueId = trim($sUniqueId);
         $sTransactionId = $sUniqueId ? $sUniqueId : sha1($sJobName.'+'.$sUniqueId);
 
         $aData = [
             'id' => $sTransactionId,
-            'params' => json_decode($sWorkload, true),
+            'params' => is_array($workload) ? $workload : json_decode($workload, true),
             'method' => $sJobName
         ];
 
