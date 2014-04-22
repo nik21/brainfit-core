@@ -19,7 +19,7 @@ class ProcessManager
         else
             $sLogfile = ROOT.'/logs/temp-'.posix_getpid().'-'.mt_rand(1,1000000).'.log';
 
-        Debugger::log('Execute', $cmd, 'write temporary stdout/stderr file', $sLogfile);
+        //Debugger::log('Execute', $cmd, 'write temporary stdout/stderr file', $sLogfile);
 
         $pipes = array();
         $descriptors = array(
@@ -48,11 +48,12 @@ class ProcessManager
 
         //Прикрепляем STDOUT в общий лог-файл, если не в персональный
         $sContent = file_get_contents($sLogfile);
-        Debugger::log('Execute complete. Last status', $status);
+
+        //Debugger::log('Execute complete. Last status', $status);
 
         if (is_null($personalLogFilename))
         {
-            Debugger::log('Report from stdout/stderr:'."\n".$sContent);
+            //Debugger::log('Report from stdout/stderr:'."\n".$sContent);
 
             unlink($sLogfile);
         }
