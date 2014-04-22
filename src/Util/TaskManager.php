@@ -36,23 +36,23 @@ class TaskManager
         $this->iPort = (int)$aOptions['p'];
         $bClientMode = (bool)$aOptions['c'];
 
-        if(!$this->sHost)
+        if(!$this->sHost || $this->sHost == 'localhost')
             $this->sHost = '127.0.0.1';
         if(!$this->iPort)
             $this->iPort = 4000;
-
-        $this->loop = \React\EventLoop\Factory::create();
 
         if($bClientMode)
             $this->executeChildMode();
         else
         {
+            $this->loop = \React\EventLoop\Factory::create();
+
             $this->shortTest();
             $this->executeServiceMethods();
             $this->executeMaster();
-        }
 
-        $this->loop->run();
+            $this->loop->run();
+        }
     }
 
     private function executeChildMode()
@@ -211,6 +211,8 @@ class TaskManager
         echo "Socket server listening on port {$this->iPort} host {$this->sHost}\n";
 
         $socket->listen($this->iPort, $this->sHost);
+        if ($this->iPort != 4000 || $this->sHost != '127.0.0.1')
+            $socket->listen(4000, '127.0.0.1');
     }
 
     private function checkProcess($sTaskId)
