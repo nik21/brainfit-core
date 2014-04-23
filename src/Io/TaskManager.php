@@ -77,7 +77,7 @@ class TaskManager
         $fp = fsockopen($sHost, $iPort, $errno, $errstr, $iTimeout);
 
         if(!$fp)
-            throw new Exception('Error: '.$errstr, $errno);
+            return false;
 
         //Send data
         for($i = 0; $i <= strlen($data)-512; $i += 512)
