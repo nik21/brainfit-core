@@ -1,8 +1,9 @@
 <?php
 namespace Brainfit\Service;
 
+use React\EventLoop\LoopInterface;
+
 interface ServiceInterface
 {
-    public function getTime();
-    public function execute($loop);
+    public function execute(LoopInterface $loop);
 }

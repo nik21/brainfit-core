@@ -5,6 +5,9 @@ use Brainfit\Api\MethodWrapper;
 use Brainfit\Io\Input\InputFake;
 use Brainfit\Model\Exception;
 use Brainfit\Service\ServiceFactory;
+use React\ChildProcess\Process;
+use React\EventLoop\LoopInterface;
+use React\Socket\Connection;
 
 /**
  * Class TaskManager
@@ -15,10 +18,20 @@ use Brainfit\Service\ServiceFactory;
  */
 class TaskManager
 {
+    const CONNECTION_TIMEOUT = 30;
+
     private $sHost = '127.0.0.1';
     private $iPort = 4000;
-    private $aProcesses = array();
+
+    /**
+     * @var Process[]
+     */
+    private $aProcesses = [];
     private $sCwd = null;
+
+    /**
+     * @var LoopInterface
+     */
     private $loop;
 
     /**
@@ -43,8 +56,7 @@ class TaskManager
 
         if($bClientMode)
             $this->executeChildMode();
-        else
-        {
+        else {
             $this->loop = \React\EventLoop\Factory::create();
 
             $this->shortTest();
@@ -60,7 +72,7 @@ class TaskManager
         list($empty, $sHashSum, $sRawData) = self::parseTaskHeader(self::readStdinData());
 
         if(md5($sRawData) != $sHashSum)
-            throw new Exception('Child: Invalid header on request: '.$sHashSum. ' != '.md5($sRawData)."\n");
+            throw new Exception('Child: Invalid header on request: ' . $sHashSum . ' != ' . md5($sRawData) . "\n");
 
         //Разбираем данные
         $aData = json_decode($sRawData, true);
@@ -69,7 +81,7 @@ class TaskManager
         $sMethod = (string)$aData['method'];
 
         if(!$sTaskId || !$sMethod)
-            throw new Exception('The task does not contain data: '.$sRawData);
+            throw new Exception('The task does not contain data: ' . $sRawData);
 
         //Ip alreade needed
         if(!isset($aParams['ip']))
@@ -90,8 +102,7 @@ class TaskManager
         $iReadSize = 0;
 
         //Read as there are data
-        while(-1)
-        {
+        while (-1) {
             $sLine = self::getBlock($iBlockSize);
 
             $iReadSize += $iBlockSize;
@@ -145,79 +156,109 @@ class TaskManager
     {
         $socket = new \React\Socket\Server($this->loop);
 
-        $conns = new \SplObjectStorage();
+        $socket->on('connection', function ($conn) {
+            /** @var Connection $conn */
 
-        $socket->on('connection', function ($conn) use ($conns)
-        {
-            //$conns->attach($conn);
+            $sConnectionId = Math::createID();
+            $sRemoteAddress = $conn->getRemoteAddress();
 
-            $sConcatData = '';
-            $conn->on('data', function ($sData) use (&$sConcatData)
-            {
-                $sConcatData .= $sData;
+            self::log($sConnectionId, "Connect client " . $sRemoteAddress);
+
+            if(!Network::isTrustInternalAddress($sRemoteAddress)) {
+                self::log($sConnectionId, "Reject not trusted connection");
+                $conn->end();
+
+                return;
+            }
+
+            $obTimer = $this->loop->addTimer(self::CONNECTION_TIMEOUT, function () use (
+                &$conn,
+                $sConnectionId, $sRemoteAddress
+            ) {
+                self::log($sConnectionId, "Close idle connection " . $sRemoteAddress);
+                $conn->end();
             });
 
-            $conn->on('end', function () use ($conns, $conn, &$sConcatData)
-            {
+            $sTaskRawData = '';
+
+
+            $run = function () use ($obTimer, &$sTaskRawData, $sConnectionId, $conn) {
                 //$data containts:
                 //data size (json-string) in dec value (8 bytes)
                 //JSON-object with fields "id", "params", "method" or "id", "action"
                 //md5 checksum of JSON
+                //\0 byte
 
                 //Check signature
-                list($empty, $sHashSum, $sRawData) = self::parseTaskHeader($sConcatData);
+                list($empty, $sHashSum, $sRawData) = self::parseTaskHeader($sTaskRawData);
 
-                if(md5($sRawData) != $sHashSum)
-                {
-                    fwrite(STDERR, 'Invalid header on request: '.$sRawData."\n");
+                if(md5($sRawData) != $sHashSum) {
+                    self::log($sConnectionId, 'Invalid request header: "' . $sTaskRawData . '"');
+                    $conn->end();
 
                     return;
                 }
 
                 $aData = json_decode($sRawData, true);
                 $sTaskId = trim($aData['id']);
+                $sAction = $aData['action'];
 
-                if(!$sTaskId)
-                {
-                    fwrite(STDERR, 'Invalid task id: '.$sRawData."\n");
+                if(!$sTaskId && !$sAction) {
+                    self::log($sConnectionId, 'Invalid task id: "' . $sTaskRawData . '"');
+                    $conn->end();
 
                     return;
                 }
 
                 $sTaskId = sha1($sTaskId);
+                $aResult = [];
 
-                if($aData['action'] == 'kill')
-                    $this->killProcess($sTaskId);
-                elseif($aData['action'] == 'check')
-                    $this->checkProcess($sTaskId);
+                if($sAction == 'kill')
+                    $aResult['result'] = $this->killProcess($sTaskId);
+                elseif($sAction == 'check')
+                    $aResult['status'] = $this->getProcessStatus($sTaskId);
+                elseif($sAction == 'ping')
+                    $aResult['result'] = $this->ping();
                 else
-                    $this->createProcess($sConcatData, $sTaskId);
+                    $aResult['result'] = $this->createProcess($sTaskRawData, $sTaskId);
 
-                //$conns->detach($conn);
+
+                self::log($sConnectionId, "Send answer");
+
+                $conn->write(json_encode($aResult) . "\n");
+
+                $conn->end();
+            };
+
+
+            $conn->on('data', function ($sData) use (&$sTaskRawData, $conn, $run) {
+                $sTaskRawData .= $sData;
+                $iEndPosition = strpos($sData, "\n");
+                if($iEndPosition)
+                    $run();
             });
 
-            /**
-             * foreach ($conns as $current) {
-             * if ($conn === $current) {
-             * continue;
-             * }
-             *
-             * $current->write($conn->getRemoteAddress().': ');
-             * $current->write($sData);
-             * }
-             */
+            $conn->on('end', function () use ($conn, &$sTaskRawData, $sConnectionId, $obTimer) {
+                if($obTimer)
+                    $obTimer->cancel();
+
+                self::log($sConnectionId, "Close connection");
+            });
         });
 
-        echo "Socket server listening on port {$this->iPort} host {$this->sHost}\n";
+        self::log("Socket server listening on port {$this->iPort} host {$this->sHost}");
 
         $socket->listen($this->iPort, $this->sHost);
-        if ($this->iPort != 4000 || $this->sHost != '127.0.0.1')
+
+        if($this->iPort != 4000 || $this->sHost != '127.0.0.1') {
+            self::log("Socket server listening on port 4000 host 127.0.0.1");
             $socket->listen(4000, '127.0.0.1');
+        }
     }
 
-    private function checkProcess($sTaskId)
+    private function getProcessStatus($sTaskId)
     {
-        return isset($this->aProcesses[$sTaskId]);
+        return isset($this->aProcesses[$sTaskId]) ? 1 : 0;
     }
 
     private function killProcess($sTaskId)
@@ -238,41 +279,39 @@ class TaskManager
 
         $sPid = 'Unknown';
 
-        $process->on('exit', function ($exitCode, $termSignal) use (&$sPid, &$sTaskId)
-        {
+        $process->on('exit', function ($exitCode, $termSignal) use (&$sPid, &$sTaskId) {
             unset($this->aProcesses[$sTaskId]);
 
-            echo "{$sPid}\tChild exit\n";
+            self::log("{$sPid}\tChild exit");
         });
 
-        $this->loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$sData, &$sTaskId)
-        {
+        $this->loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$sData, &$sTaskId) {
             $process->start($timer->getLoop());
             $sPid = $process->getPid();
             $this->aProcesses[$sTaskId] = $process;
 
-            echo "{$sPid}\tBegin new process\n";
+            self::log("{$sPid}\tBegin new process");
 
-            for($i = 0; $i <= strlen($sData)-512; $i += 512)
+            for ($i = 0; $i <= strlen($sData) - 512; $i += 512)
                 $process->stdin->write(substr($sData, $i, 512));
 
-            if ($iLastBlock = strlen($sData)-$i)
+            if($iLastBlock = strlen($sData) - $i)
                 $process->stdin->write(substr($sData, $i, $iLastBlock), $iLastBlock);
 
             $process->stdin->end();
 
-            $process->stdout->on('data', function ($output) use ($sPid)
-            {
+            $process->stdout->on('data', function ($output) use ($sPid) {
                 if($output)
-                    echo "{$sPid}\tMessage from child: {$output}\n";
+                    self::log("{$sPid}\tMessage from child: {$output}");
             });
 
-            $process->stderr->on('data', function ($output) use ($sPid)
-            {
+            $process->stderr->on('data', function ($output) use ($sPid) {
                 if($output)
-                    echo "{$sPid}\tError from child: {$output}\n";
+                    self::log("{$sPid}\tError from child: {$output}");
             });
         });
+
+        return true;
     }
 
     /**
@@ -280,10 +319,9 @@ class TaskManager
      */
     private function executeServiceMethods()
     {
-        $aFiles = scandir(ROOT.'/engine/Service/');
-        foreach($aFiles as $sFile)
-        {
-            if ($sFile == '.' || $sFile == '..')
+        $aFiles = scandir(ROOT . '/engine/Service/');
+        foreach ($aFiles as $sFile) {
+            if($sFile == '.' || $sFile == '..')
                 continue;
 
             $sClassName = str_replace('.php', '', $sFile);
@@ -297,12 +335,29 @@ class TaskManager
         $sProblem = '';
 
         $aData = apc_cache_info();
-        if (!$aData['stime'])
+        if(!$aData['stime'])
             $sProblem = "Need add \"apc.enable_cli\" option\n";
 
-        if (!$sProblem)
+        if(!$sProblem)
             return;
 
         throw new Exception($sProblem);
+    }
+
+    private static function log($string1 = '', $string2 = '', $stringN = '')
+    {
+        $message = '';
+        for ($i = 0; $i < func_num_args(); $i++)
+            $message .= func_get_arg($i) . " ";
+
+        fwrite(STDERR, trim($message) . "\n");
+        //Debugger::log($message);
+
+        return true;
+    }
+
+    private function ping()
+    {
+        return true;
     }
 }
