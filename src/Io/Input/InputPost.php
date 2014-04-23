@@ -29,10 +29,9 @@ class InputPost implements InputInterface
         $allKeys = array_diff(array_keys($this->buffer), $aExceptionsList);
         $ret = array();
 
+        //VALIDATOR_RAW to suppress errors >4k
         foreach($allKeys as $curKey)
-        {
-            $ret[$curKey] = $this->getParam($curKey);
-        }
+            $ret[$curKey] = $this->getParam($curKey, VALIDATOR_RAW);
 
         return $ret;
     }
