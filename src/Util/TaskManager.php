@@ -56,7 +56,8 @@ class TaskManager
 
         if($bClientMode)
             $this->executeChildMode();
-        else {
+        else
+        {
             $this->loop = \React\EventLoop\Factory::create();
 
             $this->shortTest();
@@ -95,6 +96,15 @@ class TaskManager
         fwrite(STDOUT, $obOutput->get());
     }
 
+    private static function parseTaskHeader($sData)
+    {
+        $iLength = (int)substr($sData, 0, 8);
+        $sHashSum = substr($sData, 8 + $iLength, 32);
+        $sRawData = substr($sData, 8, $iLength);
+
+        return [$iLength, $sHashSum, $sRawData];
+    }
+
     private static function readStdinData()
     {
         $iBlockSize = 512;
@@ -102,7 +112,8 @@ class TaskManager
         $iReadSize = 0;
 
         //Read as there are data
-        while (-1) {
+        while (-1)
+        {
             $sLine = self::getBlock($iBlockSize);
 
             $iReadSize += $iBlockSize;
@@ -132,6 +143,9 @@ class TaskManager
         return $sData;
     }
 
+
+    ////
+
     private static function getBlock($iBlockSize)
     {
         $iBlockSize = (int)$iBlockSize;
@@ -141,22 +155,43 @@ class TaskManager
         return fread(STDIN, $iBlockSize);
     }
 
-
-    ////
-    private static function parseTaskHeader($sData)
+    private function shortTest()
     {
-        $iLength = (int)substr($sData, 0, 8);
-        $sHashSum = substr($sData, 8 + $iLength, 32);
-        $sRawData = substr($sData, 8, $iLength);
+        $sProblem = '';
 
-        return [$iLength, $sHashSum, $sRawData];
+        $aData = apc_cache_info();
+        if(!$aData['stime'])
+            $sProblem = "Need add \"apc.enable_cli\" option\n";
+
+        if(!$sProblem)
+            return;
+
+        throw new Exception($sProblem);
+    }
+
+    /**
+     * Scan "Service" folder and execute all methods
+     */
+    private function executeServiceMethods()
+    {
+        $aFiles = scandir(ROOT . '/engine/Service/');
+        foreach ($aFiles as $sFile)
+        {
+            if($sFile == '.' || $sFile == '..')
+                continue;
+
+            $sClassName = str_replace('.php', '', $sFile);
+            $obClass = ServiceFactory::create($sClassName);
+            $obClass->execute($this->loop);
+        }
     }
 
     private function executeMaster()
     {
         $socket = new \React\Socket\Server($this->loop);
 
-        $socket->on('connection', function ($conn) {
+        $socket->on('connection', function ($conn)
+        {
             /** @var Connection $conn */
 
             $sConnectionId = Math::createID();
@@ -164,25 +199,27 @@ class TaskManager
 
             self::log($sConnectionId, "Connect client " . $sRemoteAddress);
 
-            if(!Network::isTrustInternalAddress($sRemoteAddress)) {
+            if(!Network::isTrustInternalAddress($sRemoteAddress))
+            {
                 self::log($sConnectionId, "Reject not trusted connection");
                 $conn->end();
 
                 return;
             }
 
-            $obTimer = $this->loop->addTimer(self::CONNECTION_TIMEOUT, function () use (
-                &$conn,
-                $sConnectionId, $sRemoteAddress
-            ) {
+            /*$obTimer = $this->loop->addTimer(self::CONNECTION_TIMEOUT, function () use (
+                &$conn, $sConnectionId, $sRemoteAddress
+            )
+            {
                 self::log($sConnectionId, "Close idle connection " . $sRemoteAddress);
                 $conn->end();
-            });
+            });*/
 
             $sTaskRawData = '';
 
 
-            $run = function () use ($obTimer, &$sTaskRawData, $sConnectionId, $conn) {
+            $run = function () use (&$sTaskRawData, $sConnectionId, $conn)
+            {
                 //$data containts:
                 //data size (json-string) in dec value (8 bytes)
                 //JSON-object with fields "id", "params", "method" or "id", "action"
@@ -192,7 +229,8 @@ class TaskManager
                 //Check signature
                 list($empty, $sHashSum, $sRawData) = self::parseTaskHeader($sTaskRawData);
 
-                if(md5($sRawData) != $sHashSum) {
+                if(md5($sRawData) != $sHashSum)
+                {
                     self::log($sConnectionId, 'Invalid request header: "' . $sTaskRawData . '"');
                     $conn->end();
 
@@ -203,7 +241,8 @@ class TaskManager
                 $sTaskId = trim($aData['id']);
                 $sAction = $aData['action'];
 
-                if(!$sTaskId && !$sAction) {
+                if(!$sTaskId && !$sAction)
+                {
                     self::log($sConnectionId, 'Invalid task id: "' . $sTaskRawData . '"');
                     $conn->end();
 
@@ -231,16 +270,18 @@ class TaskManager
             };
 
 
-            $conn->on('data', function ($sData) use (&$sTaskRawData, $conn, $run) {
+            $conn->on('data', function ($sData) use (&$sTaskRawData, $conn, $run)
+            {
                 $sTaskRawData .= $sData;
                 $iEndPosition = strpos($sData, "\n");
                 if($iEndPosition)
                     $run();
             });
 
-            $conn->on('end', function () use ($conn, &$sTaskRawData, $sConnectionId, $obTimer) {
-                if($obTimer)
-                    $obTimer->cancel();
+            $conn->on('end', function () use ($conn, &$sTaskRawData, $sConnectionId)
+            {
+                /*if($obTimer)
+                    $obTimer->cancel();*/
 
                 self::log($sConnectionId, "Close connection");
             });
@@ -250,15 +291,24 @@ class TaskManager
 
         $socket->listen($this->iPort, $this->sHost);
 
-        if($this->iPort != 4000 || $this->sHost != '127.0.0.1') {
+        if($this->iPort != 4000 || $this->sHost != '127.0.0.1')
+        {
             self::log("Socket server listening on port 4000 host 127.0.0.1");
             $socket->listen(4000, '127.0.0.1');
         }
     }
 
-    private function getProcessStatus($sTaskId)
+    private static function log($string1 = '', $string2 = '', $stringN = '')
     {
-        return isset($this->aProcesses[$sTaskId]) ? 1 : 0;
+        $message = '';
+        for ($i = 0; $i < func_num_args(); $i++)
+            $message .= func_get_arg($i) . " ";
+
+        fwrite(STDERR, trim($message) . "\n");
+
+        //Debugger::log($message);
+
+        return true;
     }
 
     private function killProcess($sTaskId)
@@ -272,6 +322,16 @@ class TaskManager
         return true;
     }
 
+    private function getProcessStatus($sTaskId)
+    {
+        return isset($this->aProcesses[$sTaskId]) ? 1 : 0;
+    }
+
+    private function ping()
+    {
+        return true;
+    }
+
     private function createProcess($sData, $sTaskId)
     {
         //Now create the process and pass it on STDIN data
@@ -279,13 +339,15 @@ class TaskManager
 
         $sPid = 'Unknown';
 
-        $process->on('exit', function ($exitCode, $termSignal) use (&$sPid, &$sTaskId) {
+        $process->on('exit', function ($exitCode, $termSignal) use (&$sPid, &$sTaskId)
+        {
             unset($this->aProcesses[$sTaskId]);
 
             self::log("{$sPid}\tChild exit");
         });
 
-        $this->loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$sData, &$sTaskId) {
+        $this->loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$sData, &$sTaskId)
+        {
             $process->start($timer->getLoop());
             $sPid = $process->getPid();
             $this->aProcesses[$sTaskId] = $process;
@@ -300,64 +362,19 @@ class TaskManager
 
             $process->stdin->end();
 
-            $process->stdout->on('data', function ($output) use ($sPid) {
+            $process->stdout->on('data', function ($output) use ($sPid)
+            {
                 if($output)
                     self::log("{$sPid}\tMessage from child: {$output}");
             });
 
-            $process->stderr->on('data', function ($output) use ($sPid) {
+            $process->stderr->on('data', function ($output) use ($sPid)
+            {
                 if($output)
                     self::log("{$sPid}\tError from child: {$output}");
             });
         });
 
-        return true;
-    }
-
-    /**
-     * Scan "Service" folder and execute all methods
-     */
-    private function executeServiceMethods()
-    {
-        $aFiles = scandir(ROOT . '/engine/Service/');
-        foreach ($aFiles as $sFile) {
-            if($sFile == '.' || $sFile == '..')
-                continue;
-
-            $sClassName = str_replace('.php', '', $sFile);
-            $obClass = ServiceFactory::create($sClassName);
-            $obClass->execute($this->loop);
-        }
-    }
-
-    private function shortTest()
-    {
-        $sProblem = '';
-
-        $aData = apc_cache_info();
-        if(!$aData['stime'])
-            $sProblem = "Need add \"apc.enable_cli\" option\n";
-
-        if(!$sProblem)
-            return;
-
-        throw new Exception($sProblem);
-    }
-
-    private static function log($string1 = '', $string2 = '', $stringN = '')
-    {
-        $message = '';
-        for ($i = 0; $i < func_num_args(); $i++)
-            $message .= func_get_arg($i) . " ";
-
-        fwrite(STDERR, trim($message) . "\n");
-        //Debugger::log($message);
-
-        return true;
-    }
-
-    private function ping()
-    {
         return true;
     }
 }

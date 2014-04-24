@@ -23,52 +23,6 @@ class TaskManager
             return false;
     }
 
-    public static function check($sServer, $iTimeout = 10)
-    {
-        $aData = self::send($sServer, $iTimeout, ['action' => 'ping']);
-
-        return isset($aData['result']);
-    }
-
-    /**
-     * @param $sUniqueId
-     * @param null $sServer
-     * @param int $iTimeout
-     *
-     * @return bool|int
-     * @throws \Brainfit\Model\Exception
-     *
-     * Return 1 if process exist. 0 if process is not exist. false otherwise
-     */
-    public static function jobStatus($sUniqueId, $sServer = null, $iTimeout = 10)
-    {
-        $sUniqueId = trim($sUniqueId);
-        if(!$sUniqueId)
-            throw new Exception('Invalid unique id');
-
-        $aData = [
-            'id' => $sUniqueId,
-            'action' => 'check'
-        ];
-
-        $aAnswer = self::send($sServer, $iTimeout, $aData);
-        return isset($aAnswer['status']) ? (int)$aAnswer['status'] : false;
-    }
-
-    public static function killTask($sUniqueId, $sServer = null, $iTimeout = 10)
-    {
-        $sUniqueId = trim($sUniqueId);
-        if(!$sUniqueId)
-            throw new Exception('Invalid unique id');
-
-        $aData = [
-            'id' => $sUniqueId,
-            'action' => 'kill'
-        ];
-
-        return self::send($sServer, $iTimeout, $aData) !== false;
-    }
-
     /**
      * @param $sServer
      * @param $iTimeout
@@ -119,9 +73,56 @@ class TaskManager
         fclose($obHandle);
 
         $aInfo = false;
-        if ($sRawAnswer)
+        if($sRawAnswer)
             $aInfo = json_decode($sRawAnswer, true);
 
         return $aInfo;
+    }
+
+    public static function check($sServer, $iTimeout = 10)
+    {
+        $aData = self::send($sServer, $iTimeout, ['action' => 'ping']);
+
+        return isset($aData['result']);
+    }
+
+    /**
+     * @param      $sUniqueId
+     * @param null $sServer
+     * @param int  $iTimeout
+     *
+     * @return bool|int
+     * @throws \Brainfit\Model\Exception
+     *
+     * Return 1 if process exist. 0 if process is not exist. false otherwise
+     */
+    public static function jobStatus($sUniqueId, $sServer = null, $iTimeout = 10)
+    {
+        $sUniqueId = trim($sUniqueId);
+        if(!$sUniqueId)
+            throw new Exception('Invalid unique id');
+
+        $aData = [
+            'id' => $sUniqueId,
+            'action' => 'check'
+        ];
+
+        $aAnswer = self::send($sServer, $iTimeout, $aData);
+
+        return isset($aAnswer['status']) ? (int)$aAnswer['status'] : false;
+    }
+
+    public static function killTask($sUniqueId, $sServer = null, $iTimeout = 10)
+    {
+        $sUniqueId = trim($sUniqueId);
+        if(!$sUniqueId)
+            throw new Exception('Invalid unique id');
+
+        $aData = [
+            'id' => $sUniqueId,
+            'action' => 'kill'
+        ];
+
+        return self::send($sServer, $iTimeout, $aData) !== false;
     }
 }
