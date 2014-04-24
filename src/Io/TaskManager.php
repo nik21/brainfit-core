@@ -101,6 +101,7 @@ class TaskManager
             throw new Exception('Low timeout');
 
         $obHandle = fsockopen($sHost, $iPort, $errno, $errstr, $iTimeout);
+        stream_set_timeout($obHandle, $iTimeout);
 
         if(!$obHandle)
             return false;
