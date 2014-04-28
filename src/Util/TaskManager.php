@@ -47,25 +47,50 @@ class TaskManager
 
         $this->sHost = $aOptions['h'];
         $this->iPort = (int)$aOptions['p'];
-        $bClientMode = (bool)$aOptions['c'];
+        $iClientMode = (int)$aOptions['c'];
 
         if(!$this->sHost || $this->sHost == 'localhost')
             $this->sHost = '127.0.0.1';
         if(!$this->iPort)
             $this->iPort = 4000;
 
-        if($bClientMode)
+        if($iClientMode == 1)
+        {
+            //Call API method
             $this->executeChildMode();
+        }
         else
         {
             $this->loop = \React\EventLoop\Factory::create();
 
-            $this->shortTest();
-            $this->executeServiceMethods();
-            $this->executeMaster();
+            if($iClientMode == 2)
+            {
+                //Call Service method
+                $this->executeServiceMethod();
+            }
+            else
+            {
+                $this->shortTest();
+                $this->executeServiceMethods();
+
+                //Start listener
+                $this->executeMaster();
+            }
 
             $this->loop->run();
         }
+    }
+
+    private function executeServiceMethod()
+    {
+        list($empty, $empty, $sClassName) = self::parseTaskHeader(self::readStdinData());
+
+        $obClass = ServiceFactory::create($sClassName);
+
+        if(!$obClass)
+            throw new Exception('Invalid class name');
+
+        $obClass->execute($this->loop);
     }
 
     private function executeChildMode()
@@ -73,7 +98,7 @@ class TaskManager
         list($empty, $sHashSum, $sRawData) = self::parseTaskHeader(self::readStdinData());
 
         if(md5($sRawData) != $sHashSum)
-            throw new Exception('Child: Invalid header on request: ' . $sHashSum . ' != ' . md5($sRawData) . "\n");
+            throw new Exception('Child: Invalid header on request: '.$sHashSum.' != '.md5($sRawData)."\n");
 
         //Разбираем данные
         $aData = json_decode($sRawData, true);
@@ -82,7 +107,7 @@ class TaskManager
         $sMethod = (string)$aData['method'];
 
         if(!$sTaskId || !$sMethod)
-            throw new Exception('The task does not contain data: ' . $sRawData);
+            throw new Exception('The task does not contain data: '.$sRawData);
 
         //Ip alreade needed
         if(!isset($aParams['ip']))
@@ -112,7 +137,7 @@ class TaskManager
         $iReadSize = 0;
 
         //Read as there are data
-        while (-1)
+        while(-1)
         {
             $sLine = self::getBlock($iBlockSize);
 
@@ -170,19 +195,28 @@ class TaskManager
     }
 
     /**
-     * Scan "Service" folder and execute all methods
+     * Scan "Service" folder and execute all methods as new process
      */
     private function executeServiceMethods()
     {
-        $aFiles = scandir(ROOT . '/engine/Service/');
-        foreach ($aFiles as $sFile)
+        $aFiles = scandir(ROOT.'/engine/Service/');
+        foreach($aFiles as $sFile)
         {
             if($sFile == '.' || $sFile == '..')
                 continue;
 
             $sClassName = str_replace('.php', '', $sFile);
-            $obClass = ServiceFactory::create($sClassName);
-            $obClass->execute($this->loop);
+
+            if(!ServiceFactory::create($sClassName))
+                continue;
+
+            //Run child proccess:
+            $sSign = md5($sClassName);
+            $sLen = (string)strlen($sClassName);
+            $sLen = str_repeat('0', 8 - strlen($sLen)).$sLen;
+            $data = $sLen.$sClassName.$sSign."\n";
+
+            $this->createProcess($data, 'service_'.$sClassName, 2);
         }
     }
 
@@ -197,7 +231,7 @@ class TaskManager
             $sConnectionId = Math::createID();
             $sRemoteAddress = $conn->getRemoteAddress();
 
-            self::log($sConnectionId, "Connect client " . $sRemoteAddress);
+            self::log($sConnectionId, "Connect client ".$sRemoteAddress);
 
             if(!Network::isTrustInternalAddress($sRemoteAddress))
             {
@@ -231,7 +265,7 @@ class TaskManager
 
                 if(md5($sRawData) != $sHashSum)
                 {
-                    self::log($sConnectionId, 'Invalid request header: "' . $sTaskRawData . '"');
+                    self::log($sConnectionId, 'Invalid request header: "'.$sTaskRawData.'"');
                     $conn->end();
 
                     return;
@@ -243,7 +277,7 @@ class TaskManager
 
                 if(!$sTaskId && !$sAction)
                 {
-                    self::log($sConnectionId, 'Invalid task id: "' . $sTaskRawData . '"');
+                    self::log($sConnectionId, 'Invalid task id: "'.$sTaskRawData.'"');
                     $conn->end();
 
                     return;
@@ -261,10 +295,9 @@ class TaskManager
                 else
                     $aResult['result'] = $this->createProcess($sTaskRawData, $sTaskId);
 
-
                 self::log($sConnectionId, "Send answer");
 
-                $conn->write(json_encode($aResult) . "\n");
+                $conn->write(json_encode($aResult)."\n");
 
                 $conn->end();
             };
@@ -301,10 +334,10 @@ class TaskManager
     private static function log($string1 = '', $string2 = '', $stringN = '')
     {
         $message = '';
-        for ($i = 0; $i < func_num_args(); $i++)
-            $message .= func_get_arg($i) . " ";
+        for($i = 0; $i < func_num_args(); $i++)
+            $message .= func_get_arg($i)." ";
 
-        fwrite(STDERR, trim($message) . "\n");
+        fwrite(STDERR, trim($message)."\n");
 
         //Debugger::log($message);
 
@@ -332,10 +365,10 @@ class TaskManager
         return true;
     }
 
-    private function createProcess($sData, $sTaskId)
+    private function createProcess($sData, $sTaskId, $iType = 1)
     {
         //Now create the process and pass it on STDIN data
-        $process = new \React\ChildProcess\Process('php daemon.php -c 1', $this->sCwd);
+        $process = new \React\ChildProcess\Process('php daemon.php -c '.$iType, $this->sCwd);
 
         $sPid = 'Unknown';
 
@@ -354,7 +387,7 @@ class TaskManager
 
             self::log("{$sPid}\tBegin new process");
 
-            for ($i = 0; $i <= strlen($sData) - 512; $i += 512)
+            for($i = 0; $i <= strlen($sData) - 512; $i += 512)
                 $process->stdin->write(substr($sData, $i, 512));
 
             if($iLastBlock = strlen($sData) - $i)
