@@ -1,6 +1,7 @@
 <?php
 namespace Brainfit\Io\Input;
 
+use Brainfit\Settings;
 use Brainfit\Util\Reflection\Singleton;
 
 class InputRouter extends InputPost implements InputInterface
@@ -21,8 +22,12 @@ class InputRouter extends InputPost implements InputInterface
         {
             //If there is no slash at the end, make a redirect to the version with a slash at the end
 
+            $aRedirectExclusionList = (array)Settings::get('PROJECT', 'REDIRECT_EXCLUSION_LIST');
+            if (!$aRedirectExclusionList)
+                $aRedirectExclusionList = ['.jpg', '.png', '.gif', '.html', '.htm', '.txt', '.php', '.pl', '.asp'];
+
             if(substr($url, -1, 1) != '/' && !in_array(mb_convert_case(substr($url, -4), MB_CASE_LOWER),
-                    ['.jpg', '.png', '.gif', '.html', '.htm'])
+                    $aRedirectExclusionList)
             )
             {
                 $url = $url.'/';
