@@ -85,7 +85,7 @@ class TaskManager
     {
         list($empty, $empty, $sClassName) = self::parseTaskHeader(self::readStdinData());
 
-        $obClass = ServiceFactory::create($sClassName);
+        $obClass = ServiceFactory::get($sClassName);
 
         if(!$obClass)
             throw new Exception('Invalid class name');
@@ -207,7 +207,7 @@ class TaskManager
 
             $sClassName = str_replace('.php', '', $sFile);
 
-            if(!ServiceFactory::create($sClassName))
+            if (!ServiceFactory::get($sClassName))
                 continue;
 
             //Run child proccess:
