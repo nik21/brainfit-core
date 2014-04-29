@@ -23,20 +23,28 @@ class InputRouter extends InputPost implements InputInterface
             //If there is no slash at the end, make a redirect to the version with a slash at the end
 
             $aRedirectExclusionList = (array)Settings::get('PROJECT', 'REDIRECT_EXCLUSION_LIST');
-            if (!$aRedirectExclusionList)
+            if(!$aRedirectExclusionList)
                 $aRedirectExclusionList = ['.jpg', '.png', '.gif', '.html', '.htm', '.txt', '.php', '.pl', '.asp'];
 
-            if(substr($url, -1, 1) != '/' && !in_array(mb_convert_case(substr($url, -4), MB_CASE_LOWER),
-                    $aRedirectExclusionList)
+            $sLastSymbol = mb_substr($url, -1, 1);
+            if($sLastSymbol != '/'
+                && !in_array(mb_convert_case(mb_substr($url, -4), MB_CASE_LOWER), $aRedirectExclusionList)
             )
             {
-                $url = $url.'/';
+                $url = $url . '/';
+                $bNeedRedirect = true;
+            }
+            elseif($sLastSymbol == '/'
+                && in_array(mb_convert_case(mb_substr($url, -5, 4), MB_CASE_LOWER), $aRedirectExclusionList)
+            )
+            {
+                $url = mb_substr($url, 0, mb_strlen($url) - 1);
                 $bNeedRedirect = true;
             }
         }
 
         //If the address has 2 slash, make a redirect on one
-        if(strpos($url, '//'))
+        if(mb_strpos($url, '//'))
         {
             $url = preg_replace('/\/+/i', '/', $url);
             $bNeedRedirect = true;
@@ -44,13 +52,13 @@ class InputRouter extends InputPost implements InputInterface
 
         if($bNeedRedirect)
         {
-            header('Location: '.($_SERVER['HTTPS'] ? 'https://' : 'http://').$_SERVER['HTTP_HOST'].$url, true, 301);
+            header('Location: ' . ($_SERVER['HTTPS'] ? 'https://' : 'http://') . $_SERVER['HTTP_HOST'] . $url, true, 301);
             exit;
         }
 
         //remove the slashes from the beginning and end addresses
-        $url = ereg_replace("^/", "", $url);
-        $url = ereg_replace("/$", "", $url);
+        $url = preg_replace("/^\//", "", $url);
+        $url = preg_replace("/\/$/", "", $url);
 
         $url = urldecode($url); //conversion %D0 in Cyrillic "П", for example
 
