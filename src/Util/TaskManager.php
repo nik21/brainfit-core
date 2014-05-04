@@ -323,12 +323,6 @@ class TaskManager
         self::log("Socket server listening on port {$this->iPort} host {$this->sHost}");
 
         $socket->listen($this->iPort, $this->sHost);
-
-        if($this->iPort != 4000 || $this->sHost != '127.0.0.1')
-        {
-            self::log("Socket server listening on port 4000 host 127.0.0.1");
-            $socket->listen(4000, '127.0.0.1');
-        }
     }
 
     private static function log($string1 = '', $string2 = '', $stringN = '')
