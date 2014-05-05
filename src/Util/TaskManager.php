@@ -362,7 +362,8 @@ class TaskManager
     private function createProcess($sData, $sTaskId, $iType = 1)
     {
         //Now create the process and pass it on STDIN data
-        $process = new \React\ChildProcess\Process('php daemon.php -c '.$iType, $this->sCwd);
+        $process = new \React\ChildProcess\Process('php daemon.php -c '.$iType.' -h '.$this->sHost.' -p '.$this->iPort,
+            $this->sCwd);
 
         $sPid = 'Unknown';
 
