@@ -9,16 +9,50 @@ use Brainfit\Util\Debugger;
  * Class Query
  * @package Io\Data
  */
-class Query extends Sql
+class Query
 {
+    private $server;
+    private $user;
+    private $password;
+    private $defaultDb;
+    private $useUtf8;
+
+    /** @var  \mysqli */
+    private $mysqli;
+
+    /** @var  \mysqli_result */
+    private $result;
+    private $_foundRows;
+
     public function __construct($sServerName = 'main')
     {
-        $sServer = Settings::get('MYSQL', 'servers', $sServerName, 'server');
-        $sUser = Settings::get('MYSQL', 'servers', $sServerName, 'login');
-        $sPassword = Settings::get('MYSQL', 'servers', $sServerName, 'password');
-        $sDefaultDb = Settings::get('MYSQL', 'servers', $sServerName, 'db');
+        $this->server = Settings::get('MYSQL', 'servers', $sServerName, 'server');
+        $this->user = Settings::get('MYSQL', 'servers', $sServerName, 'login');
+        $this->password = Settings::get('MYSQL', 'servers', $sServerName, 'password');
+        $this->defaultDb = Settings::get('MYSQL', 'servers', $sServerName, 'db');
+        $this->useUtf8 = Settings::get('MYSQL', 'switchToUTF8');
+    }
 
-        parent::__construct($sServer, $sUser, $sPassword, $sDefaultDb, Settings::get('MYSQL', 'switchToUTF8'));
+    private function lazyInit()
+    {
+        if($this->mysqli)
+            return;
+
+        $this->mysqli = new \mysqli($this->server, $this->user, $this->password, $this->defaultDb);
+
+        if(mysqli_connect_errno())
+            throw new Exception('Невозможно работать с sql: '.mysqli_connect_error().', '
+                .mysqli_connect_errno(), 0);
+
+        if($this->useUtf8)
+            $this->mysqli->set_charset('utf8');
+    }
+
+    public function escape($data)
+    {
+        $this->lazyInit(); //TODO: Может снижать пр-сть
+
+        return $this->mysqli->real_escape_string($data);
     }
 
 
@@ -68,7 +102,8 @@ class Query extends Sql
         return $this;
     }
 
-    public function select($sField1, $sField2 = null, $sFieldN = null)
+    public function select(/** @noinspection PhpUnusedParameterInspection */
+        $sField1, $sField2 = null, $sFieldN = null)
     {
         for($i = 0; $i < func_num_args(); $i++)
             $this->aFields[] = func_get_arg($i);
@@ -127,7 +162,10 @@ class Query extends Sql
         return $this;
     }
 
-    public function where($sVariable, $sValue1 = null, $sValue2 = null, $sValueN = null)
+    public function where($sVariable, /** @noinspection PhpUnusedParameterInspection */
+                          $sValue1 = null, /** @noinspection PhpUnusedParameterInspection */
+                          $sValue2 = null, /** @noinspection PhpUnusedParameterInspection */
+                          $sValueN = null)
     {
         $this->aLoadedValues = [];
         $this->iPointer = 0;
@@ -142,7 +180,10 @@ class Query extends Sql
         return $this;
     }
 
-    public function join($sDirection, $sTableName, $sSuffix, $sVariable, $sValue1 = null, $sValue2 = null, $sValueN = null)
+    public function join($sDirection, $sTableName, $sSuffix, $sVariable, /** @noinspection PhpUnusedParameterInspection */
+                         $sValue1 = null, /** @noinspection PhpUnusedParameterInspection */
+                         $sValue2 = null, /** @noinspection PhpUnusedParameterInspection */
+                         $sValueN = null)
     {
         if(!in_array($sDirection, ['left', 'right', 'inner']))
             throw new Exception('Invalid direction');
@@ -166,7 +207,10 @@ class Query extends Sql
         return $this;
     }
 
-    public function having($sVariable, $sValue1 = null, $sValue2 = null, $sValueN = null)
+    public function having($sVariable, /** @noinspection PhpUnusedParameterInspection */
+                           $sValue1 = null, /** @noinspection PhpUnusedParameterInspection */
+                           $sValue2 = null, /** @noinspection PhpUnusedParameterInspection */
+                           $sValueN = null)
     {
         $this->aLoadedValues = [];
         $this->iPointer = 0;
@@ -343,8 +387,31 @@ class Query extends Sql
 
             //Change some rows types:
             foreach($aFields as $field)
-                if($field->type == 3 && !is_null($matrix[$k][$field->name]))
-                    $matrix[$k][$field->name] = intval($matrix[$k][$field->name]);
+            {
+                switch ( $field->type )
+                {
+                    // Convert INT to an integer.
+                    case MYSQLI_TYPE_TINY:
+                    case MYSQLI_TYPE_SHORT:
+                    case MYSQLI_TYPE_LONG:
+                    case MYSQLI_TYPE_LONGLONG:
+                    case MYSQLI_TYPE_INT24:
+                        $matrix[$k][$field->name] = intval($matrix[$k][$field->name]);
+                        break;
+                    // Convert FLOAT to a float.
+                    case MYSQLI_TYPE_FLOAT:
+                    case MYSQLI_TYPE_DOUBLE:
+                        $matrix[$k][$field->name] = floatval($matrix[$k][$field->name]);
+                        break;
+                    // Convert TIMESTAMP to a DateTime object.
+                    /*case MYSQLI_TYPE_TIMESTAMP:
+                    case MYSQLI_TYPE_DATE:
+                    case MYSQLI_TYPE_DATETIME:
+                        $obTemp = new \DateTime($matrix[$k][$field->name]);
+                        $matrix[$k][$field->name] = $obTemp->getTimestamp();
+                        break;*/
+                }
+            }
 
             $k++;
         }
@@ -364,5 +431,80 @@ class Query extends Sql
             .': '.$this->sResultSql, $this->aResult);
 
         return $this;
+    }
+
+
+
+
+    //////////////////////////////////////////
+    public function run($strSQL)
+    {
+        $this->CreateQuery($strSQL, true);
+
+        $result1 = $this->mysqli->affected_rows;
+        $this->free();
+
+        return $result1;
+    }
+
+    public function CreateQuery($strSQLQuery, $foundRowsDisable = false)
+    {
+        $this->lazyInit();
+
+        if(!$strSQLQuery)
+            return 0;
+
+        $calc_found_rows_enable = 0;
+
+        if(!$foundRowsDisable)
+        {
+            if(mb_eregi('LIMIT ', $strSQLQuery) && mb_eregi('^SELECT', $strSQLQuery))
+            {
+                //Если включено лимитирование и это инструкция SELECT, то посчитать, при условии разрешения
+                $calc_found_rows_enable = 1;
+
+                $strSQLQuery = mb_eregi_replace("(^SELECT)(.*)", "SELECT SQL_CALC_FOUND_ROWS\\2;SELECT FOUND_ROWS();", $strSQLQuery);
+            }
+        }
+
+        if($this->mysqli->multi_query($strSQLQuery))
+        {
+            do
+            {
+                /* store first result set */
+
+                $this->result = $this->mysqli->store_result();
+
+
+                if($calc_found_rows_enable)
+                {
+                    if($this->mysqli->more_results() && $this->mysqli->next_result())
+                    {
+                        list($total) = $this->mysqli->store_result()->fetch_row();
+                        $this->_foundRows = $total;
+                    }
+                }
+                else
+                    $this->_foundRows = is_object($this->result) ? $this->result->num_rows : 0;
+
+
+            } while($this->mysqli->more_results() && $this->mysqli->next_result());
+
+
+        }
+        else
+        {
+            Debugger::log('Mysql error:', $this->mysqli->error, 'Query:', $strSQLQuery);
+            throw new Exception('Mysql error #'.$this->mysqli->errno, 1);
+        }
+
+        return 1;
+    }
+
+    public function free()
+    {
+        if($this->result)
+            $this->result->free();
+        $this->_foundRows = 0;
     }
 }
