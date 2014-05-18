@@ -501,6 +501,31 @@ class Query
         return 1;
     }
 
+    public function lookup($ColumnName, $TableName, $CriteriaColumn, $CriteriaCondition, $cache_time = 0)
+    {
+        $tablesArray = mb_split('\.', $TableName);
+
+        $newTablesArray = array();
+        foreach($tablesArray as $t)
+        {
+            $newTablesArray[] = "`{$t}`";
+        }
+        $TableName = join('.', $newTablesArray);
+
+
+        //$myDBQueryForLookup = self::getInstance();
+
+        $this->CreateQuery("select `".$ColumnName."` from ".$TableName." where `$CriteriaColumn` = '"
+            .$this->escape($CriteriaCondition)."' limit 1", true);
+
+        $row = $this->result->fetch_row();
+        $ret = $row[0];
+
+        $this->free();
+
+        return $ret;
+    }
+
     public function free()
     {
         if($this->result)
