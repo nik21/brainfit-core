@@ -532,4 +532,166 @@ class Query
             $this->result->free();
         $this->_foundRows = 0;
     }
+
+    public function delete($table, $criteriaField, $criteria)
+    {
+        $tablesArray = mb_split('\.', $table);
+
+        $newTablesArray = array();
+        foreach($tablesArray as $t)
+        {
+            $newTablesArray[] = "`{$t}`";
+        }
+        $table = join('.', $newTablesArray);
+
+        try
+        {
+            //TODO: Защиту
+            $this->CreateQuery(
+                "DELETE FROM {$table} WHERE `{$criteriaField}` = '{$criteria}'",
+                true
+            );
+
+            $this->free();
+
+            return true;
+        } catch(\Exception $e)
+        {
+            $err = $e;
+            Debugger::log("SQL Error: $err");
+
+            return false;
+        }
+    }
+
+    public function insert($table, $fields, $getInsertId = false, $update = false, $ignore = false)
+    {
+        $tablesArray = explode('.', $table);
+
+        $newTablesArray = array();
+        foreach($tablesArray as $t)
+        {
+            $newTablesArray[] = "`{$t}`";
+        }
+        $table = implode('.', $newTablesArray);
+
+        try
+        {
+            $updateFields = array();
+            $updateValues = array();
+            $updateAsSqlFields = array();
+
+            foreach($fields as $name => $value)
+            {
+                $commitAsSql = false; //Сохранять как sql-код поля, которые начинаются с >
+
+
+                if($name && mb_substr($name, 0, 1) == '>')
+                {
+                    $name = mb_substr($name, 1);
+                    $commitAsSql = true;
+                }
+
+                if($name && mb_substr($name, 0, 1) == '>')
+                {
+                    $name = mb_substr($name, 1);
+                    $updateAsSqlFields[] = "`{$name}`=".$value;
+                }
+                else
+                {
+                    $updateFields[] = "`{$name}`";
+                    $updateValues[] = $commitAsSql ? $value : "'".$this->escape($value)."'";
+                }
+            }
+
+            $added_update_sql = "";
+
+            if($update)
+            {
+                $added_update_sql = " ON DUPLICATE KEY UPDATE ";
+
+                $f2 = 0;
+                foreach($updateFields as $f1)
+                {
+                    if($f2)
+                        $added_update_sql .= ",";
+                    $added_update_sql .= "{$f1} = VALUES({$f1})";
+                    $f2++;
+                }
+                foreach($updateAsSqlFields as $f1)
+                {
+                    if($f2)
+                        $added_update_sql .= ",";
+                    $added_update_sql .= $f1;
+                    $f2++;
+                }
+            }
+
+            $this->CreateQuery(
+                "INSERT ".($ignore ? "IGNORE " : "")."INTO {$table} (".
+                join(',', $updateFields).
+                ") VALUES (".
+                join(',', $updateValues).
+                "){$added_update_sql};",
+                true
+            );
+
+
+            if($getInsertId)// && !$update)
+            { //При update даже если произошел первичный insert вернется affected_rows!
+                $ret = $this->mysqli->insert_id;
+                $this->free();
+
+                return $ret;
+            }
+            else
+            {
+                $result1 = $this->mysqli->affected_rows;
+                $this->free();
+
+                return $result1;
+            }
+
+        } catch(Exception $e)
+        {
+            $err = $e;
+            Debugger::log("SQL Error: $err");
+        }
+
+        return false;
+    }
+
+    public function update($table, $field, $criteriaField, $criteria, $value)
+    {
+        $tablesArray = mb_split('\.', $table);
+
+        $newTablesArray = array();
+        foreach($tablesArray as $t)
+        {
+            $newTablesArray[] = "`{$t}`";
+        }
+        $table = join('.', $newTablesArray);
+
+        try
+        {
+            $this->CreateQuery(
+                "UPDATE {$table}
+                    SET `{$field}` = '".$this->escape($value)."'
+                    WHERE `{$criteriaField}` = '{$criteria}'",
+                true
+            );
+        } catch(Exception $e)
+        {
+            $err = $e;
+            Debugger::log("SQL Error: $err");
+        }
+
+        $result1 = $this->mysqli->affected_rows;
+        $this->free();
+
+        if(!$err)
+            return $result1;
+
+        return false;
+    }
 }
