@@ -30,14 +30,18 @@ class Network
 
     /**
      * Whether the address to the list of servers in the cluster, you can trust him?
-     * @param $ip
      *
-     * @throws Exception
+     * @param       $ip
+     *
+     * @param array $aNetworks
+     *
+     * @throws \Brainfit\Model\Exception
      * @return bool
      */
-    public static function isTrustInternalAddress($ip)
+    public static function isTrustInternalAddress($ip, $aNetworks = null)
     {
-        $aNetworks = (array)Settings::get('PROJECT', 'INTERNAL_NETWORKS');
+        $aNetworks = is_null($aNetworks) ? (array)Settings::get('PROJECT', 'INTERNAL_NETWORKS') : (array)$aNetworks;
+        
         if(!$aNetworks)
             throw new Exception('Not specified for the project INTERNAL_NETWORKS');
 
