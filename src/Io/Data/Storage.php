@@ -356,14 +356,14 @@ abstract class Storage
 
         if($bByScore)
         {
+            $aOptions = []
+                +(array)($iOffset || $iCount ? ['limit' => [$iOffset, $iCount]] : [])
+                +(array)($bWithScores ? ['withscores' => true] : []);
+
             if($bReverse)
-                $fieldValue = $this->redis->zRevRangeByScore($keyName, $iMaxOrStop, $iMinOrStart,
-                    ($iOffset || $iCount ? array('limit' => array($iOffset, $iCount),
-                        'withscores' => (bool)$bWithScores) : array()));
+                $fieldValue = $this->redis->zRevRangeByScore($keyName, $iMaxOrStop, $iMinOrStart, $aOptions);
             else
-                $fieldValue = $this->redis->zRangeByScore($keyName, $iMinOrStart, $iMaxOrStop,
-                    ($iOffset || $iCount ? array('limit' => array($iOffset, $iCount),
-                        'withscores' => (bool)$bWithScores) : array()));
+                $fieldValue = $this->redis->zRangeByScore($keyName, $iMinOrStart, $iMaxOrStop, $aOptions);
         }
         elseif(is_null($iMinOrStart) && is_null($iMaxOrStop))
             $fieldValue = ($bReverse ? $this->redis->zRevRange($keyName, 0, -1)
@@ -376,13 +376,25 @@ abstract class Storage
             return array();
 
         $ret = array();
-        foreach($fieldValue as $v)
+        if ($bWithScores)
         {
-            if(!is_null($objectName))
-                $ret[] = $this->getObjectConstructor($objectName, $v); //new $objectName($v);
-            else
-                $ret[] = $v;
-
+            foreach($fieldValue as $v=>$score)
+            {
+                if(!is_null($objectName))
+                    $ret[] = ['score'=>$score, 'object'=>$this->getObjectConstructor($objectName, $v)];
+                else
+                    $ret[] = ['score'=>$score, 'object'=>$v];
+            }
+        }
+        else
+        {
+            foreach($fieldValue as $v)
+            {
+                if(!is_null($objectName))
+                    $ret[] = $this->getObjectConstructor($objectName, $v); //new $objectName($v);
+                else
+                    $ret[] = $v;
+            }
         }
 
         return $ret;
@@ -495,12 +507,17 @@ abstract class Storage
         return $this;
     }
 
-    public function setIfNotExist($fieldName, $fieldValue)
+    public function setIfNotExist($fieldName, $fieldValue, $seconds = null)
     {
         $this->init();
         $sKey = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
 
-        return $this->redis->setnx($sKey, $fieldValue);
+        $ret = $this->redis->setnx($sKey, $fieldValue);
+
+        if ($ret && !is_null($seconds))
+            $this->redis->expire($sKey, (int)$seconds);
+
+        return $ret;
     }
 
     /**
@@ -582,7 +599,7 @@ abstract class Storage
         $iIncrement = (int)$iIncrement;
 
         if(!$iIncrement) //0
-        return $this->getField($fieldName);
+            return $this->getField($fieldName);
 
         if($iIncrement == 1)
             return $this->redis->incr($sKey);
@@ -1126,9 +1143,9 @@ abstract class Storage
         $this->init();
 
         $sSourceFieldName = $this->getKeyName(array('table',
-            $this->getCurrentId(), $sSourceFieldName));
+                                                    $this->getCurrentId(), $sSourceFieldName));
         $sDestinationFieldName = $this->getKeyName(array('table',
-            $this->getCurrentId(), $sDestinationFieldName));
+                                                         $this->getCurrentId(), $sDestinationFieldName));
 
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
@@ -1185,13 +1202,11 @@ abstract class Storage
         $iDecrement = (int)$iDecrement;
 
         if(!$iDecrement) //0
-        return $this->getField($fieldName);
+            return $this->getField($fieldName);
 
         if($iDecrement == 1)
             return $this->redis->decr($sKey);
         else
             return $this->redis->decrBy($sKey, $iDecrement);
     }
-
-
 }
