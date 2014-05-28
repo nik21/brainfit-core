@@ -22,6 +22,7 @@ class TaskManager
 
     private $sHost = '127.0.0.1';
     private $iPort = 4000;
+    private static $bDebug = false;
 
     /**
      * @var Process[]
@@ -48,6 +49,7 @@ class TaskManager
         $this->sHost = $aOptions['h'];
         $this->iPort = (int)$aOptions['p'];
         $iClientMode = (int)$aOptions['c'];
+        self::$bDebug = $aOptions['d'] ? true : false;
 
         if(!$this->sHost || $this->sHost == 'localhost')
             $this->sHost = '127.0.0.1';
@@ -118,7 +120,8 @@ class TaskManager
 
         $obOutput = MethodWrapper::execute($sMethod, $obInput);
 
-        fwrite(STDOUT, $obOutput->get());
+        if (self::$bDebug)
+            fwrite(STDERR, $obOutput->get()."\n");
     }
 
     private static function parseTaskHeader($sData)
@@ -331,9 +334,8 @@ class TaskManager
         for($i = 0; $i < func_num_args(); $i++)
             $message .= func_get_arg($i)." ";
 
-        fwrite(STDERR, trim($message)."\n");
-
-        //Debugger::log($message);
+        if (self::$bDebug)
+            fwrite(STDERR, trim($message)."\n");
 
         return true;
     }

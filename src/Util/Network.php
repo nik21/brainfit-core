@@ -41,7 +41,7 @@ class Network
     public static function isTrustInternalAddress($ip, $aNetworks = null)
     {
         $aNetworks = is_null($aNetworks) ? (array)Settings::get('PROJECT', 'INTERNAL_NETWORKS') : (array)$aNetworks;
-        
+
         if(!$aNetworks)
             throw new Exception('Not specified for the project INTERNAL_NETWORKS');
 
