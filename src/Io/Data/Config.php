@@ -41,12 +41,16 @@ class Config
 
     private static function getConfig($aFiles)
     {
-        $aContent = array();
+        $ret = [];
         $parser = new \sfYamlParser();
 
         foreach($aFiles as $sFile)
-            $aContent[] = $parser->parse(file_get_contents($sFile));
+        {
+            $aContent = $parser->parse(file_get_contents($sFile));
+            foreach($aContent as $k=>$v)
+                $ret[$k] = $v;
+        }
 
-        return call_user_func_array('array_replace_recursive', $aContent);
+        return $ret;
     }
 }
