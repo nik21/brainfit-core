@@ -367,6 +367,14 @@ class Query
         elseif($this->aOtherParams['limit'])
             $this->sResultSql .= " LIMIT ".$this->aOtherParams['limit'];
 
+        $sCacheKey = sha1($this->sResultSql);
+        $iCache = (int)$this->aOtherParams['cache'];
+        if ($iCache && !apc_add($sCacheKey, 1, $iCache))
+        {
+            $this->aResult = (array)apc_fetch($sCacheKey.'v');
+            return;
+        }
+
         //Begin
         $this->CreateQuery($this->sResultSql, !$this->aOtherParams['foundRows']);
 
@@ -421,6 +429,9 @@ class Query
         $this->free();
 
         $this->aResult = (array)$matrix;
+
+        if ($iCache)
+            apc_store($sCacheKey.'v', $this->aResult, $iCache*2);
     }
 
     public function dump($sDescription = null)
