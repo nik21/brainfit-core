@@ -11,52 +11,17 @@ use Brainfit\Util\Debugger;
  */
 class Query
 {
-    private $server;
-    private $user;
-    private $password;
-    private $defaultDb;
-    private $useUtf8;
+    private $sServerName;
+
+    public $profilingInfo = '';
 
     /** @var  \mysqli */
-    private $mysqli;
+    private static $mysqli = null;
 
     /** @var  \mysqli_result */
     private $result;
     private $_foundRows;
 
-    public function __construct($sServerName = 'main')
-    {
-        $this->server = Settings::get('MYSQL', 'servers', $sServerName, 'server');
-        $this->user = Settings::get('MYSQL', 'servers', $sServerName, 'login');
-        $this->password = Settings::get('MYSQL', 'servers', $sServerName, 'password');
-        $this->defaultDb = Settings::get('MYSQL', 'servers', $sServerName, 'db');
-        $this->useUtf8 = Settings::get('MYSQL', 'switchToUTF8');
-    }
-
-    private function lazyInit()
-    {
-        if($this->mysqli)
-            return;
-
-        $this->mysqli = new \mysqli($this->server, $this->user, $this->password, $this->defaultDb);
-
-        if(mysqli_connect_errno())
-            throw new Exception('Невозможно работать с sql: '.mysqli_connect_error().', '
-                .mysqli_connect_errno(), 0);
-
-        if($this->useUtf8)
-            $this->mysqli->set_charset('utf8');
-    }
-
-    public function escape($data)
-    {
-        $this->lazyInit(); //TODO: Может снижать пр-сть
-
-        return $this->mysqli->real_escape_string($data);
-    }
-
-
-    //    Новшества
     private $aTables = [];
     private $aFields = [];
     private $bDistinct = false;
@@ -74,25 +39,52 @@ class Query
 
     private $iCalcFoundRows = 0;
 
-    public function reset()
+    public function __construct($sServerName)
     {
-        $this->aTables = [];
-        $this->aFields = [];
-        $this->bDistinct = false;
-        $this->sWhere = null;
-        $this->sJoins = null;
-        $this->sHaving = null;
-        $this->sResultSql = null;
-        $this->aOtherParams = [];
-        $this->aOrderBy = [];
-        $this->aGroupBy = [];
+        $this->sServerName = $sServerName;
+    }
 
-        $this->aLoadedValues = null;
-        $this->iPointer = 0;
+    /**
+     * @param string $sServerName
+     * @return self
+     */
+    public static function create($sServerName = 'main')
+    {
+        return new self($sServerName);
+    }
 
-        $this->iCalcFoundRows = 0;
+    /**
+     * @return \mysqli
+     * @throws \Brainfit\Model\Exception
+     */
+    private function getMysqli()
+    {
+        if (is_null(self::$mysqli))
+        {
+            if (!$sServer = Settings::get('MYSQL', 'servers', $this->sServerName, 'server'))
+                throw new Exception('Mysql server with id '.$this->sServerName.' not found in config file');
 
-        return $this;
+            $sUser = Settings::get('MYSQL', 'servers', $this->sServerName, 'login');
+            $sPassword = Settings::get('MYSQL', 'servers', $this->sServerName, 'password');
+            $sDefaultDb = Settings::get('MYSQL', 'servers', $this->sServerName, 'db');
+            $bUseUtf8 = Settings::get('MYSQL', 'switchToUTF8');
+
+            self::$mysqli = new \mysqli($sServer, $sUser, $sPassword, $sDefaultDb);
+
+            if(mysqli_connect_errno())
+                throw new Exception('Mysql connection error: '.mysqli_connect_error().': ' .mysqli_connect_errno());
+
+            if($bUseUtf8)
+                self::$mysqli->set_charset('utf8');
+        }
+
+        return self::$mysqli;
+    }
+
+    public function escape($data)
+    {
+        //Подключение к БД может снижать производительность
+        return self::getMysqli()->real_escape_string($data);
     }
 
     public function calcFoundRows()
@@ -118,6 +110,12 @@ class Query
         return $this;
     }
 
+    /**
+     * @param $sTableName
+     * @param null $sSuffix
+     * @return $this
+     * @throws \Brainfit\Model\Exception
+     */
     public function from($sTableName, $sSuffix = null)
     {
         if(strpos($sTableName, ' ') !== false)
@@ -317,6 +315,10 @@ class Query
         return (array)$this->aResult;
     }
 
+    /**
+     * @param callable $obLoader
+     * @return array
+     */
     public function load(callable $obLoader)
     {
         $this->prepareResult();
@@ -335,6 +337,11 @@ class Query
 
     private function prepareResult()
     {
+        //        if ($this->bAlreadyGet)
+        //            throw new Exception('Need call "createCommand" before execute new query');
+        //
+        //        $this->bAlreadyGet = true;
+
         //The resulting query
         $this->sResultSql = 'SELECT '.($this->bDistinct ? 'DISTINCT ' : '');
 
@@ -367,18 +374,32 @@ class Query
         elseif($this->aOtherParams['limit'])
             $this->sResultSql .= " LIMIT ".$this->aOtherParams['limit'];
 
+        //maybe from cache
         $sCacheKey = sha1($this->sResultSql);
         $iCache = (int)$this->aOtherParams['cache'];
+
+        //profiling:
+        $this->profilingInfo[] = [
+            'query' => $this->sResultSql,
+            'cache' => $iCache,
+            'from cache' => false
+        ];
+
         if ($iCache && !apc_add($sCacheKey, 1, $iCache))
         {
             $this->aResult = (array)apc_fetch($sCacheKey.'v');
+            $this->iCalcFoundRows = (int)apc_fetch($sCacheKey.'f');
+
+            //debug:
+            if ($sDumpName = $this->aOtherParams['getDump'])
+                Debugger::clientLog('HIDDEN'.($sDumpName ? 'sql' : $sDumpName).' [cache]: '.$this->sResultSql,
+                    $this->aResult);
+
             return;
         }
 
         //Begin
         $this->CreateQuery($this->sResultSql, !$this->aOtherParams['foundRows']);
-
-        //TODO: Use $this->aOtherParams['offset/limit/cache']
 
         $matrix = [];
         $k = 0;
@@ -424,22 +445,26 @@ class Query
             $k++;
         }
 
-        $this->iCalcFoundRows = $this->_foundRows;
+        $this->iCalcFoundRows = (int)$this->_foundRows;
 
         $this->free();
 
         $this->aResult = (array)$matrix;
 
+        if ($sDumpName = $this->aOtherParams['getDump'])
+            Debugger::clientLog('HIDDEN'.($sDumpName ? 'sql' : $sDumpName).': [query]: '.$this->sResultSql,
+                $this->aResult);
+
         if ($iCache)
+        {
             apc_store($sCacheKey.'v', $this->aResult, $iCache*2);
+            apc_store($sCacheKey.'f', $this->iCalcFoundRows, $iCache*2);
+        }
     }
 
-    public function dump($sDescription = null)
+    public function dump($sDescription = 'query')
     {
-        $this->prepareResult();
-
-        Debugger::clientLog('HIDDEN'.(is_null($sDescription) ? 'sql' : $sDescription)
-            .': '.$this->sResultSql, $this->aResult);
+        $this->aOtherParams['getDump'] = $sDescription;
 
         return $this;
     }
@@ -452,16 +477,14 @@ class Query
     {
         $this->CreateQuery($strSQL, true);
 
-        $result1 = $this->mysqli->affected_rows;
+        $result1 = self::getMysqli()->affected_rows;
         $this->free();
 
         return $result1;
     }
 
-    public function CreateQuery($strSQLQuery, $foundRowsDisable = false)
+    private function CreateQuery($strSQLQuery, $foundRowsDisable = false)
     {
-        $this->lazyInit();
-
         if(!$strSQLQuery)
             return 0;
 
@@ -478,20 +501,20 @@ class Query
             }
         }
 
-        if($this->mysqli->multi_query($strSQLQuery))
+        if(self::getMysqli()->multi_query($strSQLQuery))
         {
             do
             {
                 /* store first result set */
 
-                $this->result = $this->mysqli->store_result();
+                $this->result = self::getMysqli()->store_result();
 
 
                 if($calc_found_rows_enable)
                 {
-                    if($this->mysqli->more_results() && $this->mysqli->next_result())
+                    if(self::getMysqli()->more_results() && self::getMysqli()->next_result())
                     {
-                        list($total) = $this->mysqli->store_result()->fetch_row();
+                        list($total) = self::getMysqli()->store_result()->fetch_row();
                         $this->_foundRows = $total;
                     }
                 }
@@ -499,14 +522,14 @@ class Query
                     $this->_foundRows = is_object($this->result) ? $this->result->num_rows : 0;
 
 
-            } while($this->mysqli->more_results() && $this->mysqli->next_result());
+            } while(self::getMysqli()->more_results() && self::getMysqli()->next_result());
 
 
         }
         else
         {
-            Debugger::log('Mysql error:', $this->mysqli->error, 'Query:', $strSQLQuery);
-            throw new Exception('Mysql error #'.$this->mysqli->errno, 1);
+            Debugger::log('Mysql error:', self::getMysqli()->error, 'Query:', $strSQLQuery);
+            throw new Exception('Mysql error #'.self::getMysqli()->errno, 1);
         }
 
         return 1;
@@ -514,27 +537,13 @@ class Query
 
     public function lookup($ColumnName, $TableName, $CriteriaColumn, $CriteriaCondition, $cache_time = 0)
     {
-        $tablesArray = mb_split('\.', $TableName);
-
-        $newTablesArray = array();
-        foreach($tablesArray as $t)
-        {
-            $newTablesArray[] = "`{$t}`";
-        }
-        $TableName = join('.', $newTablesArray);
-
-
-        //$myDBQueryForLookup = self::getInstance();
-
-        $this->CreateQuery("select `".$ColumnName."` from ".$TableName." where `$CriteriaColumn` = '"
-            .$this->escape($CriteriaCondition)."' limit 1", true);
-
-        $row = $this->result->fetch_row();
-        $ret = $row[0];
-
-        $this->free();
-
-        return $ret;
+        return $this
+            ->select($ColumnName)
+            ->from($TableName)
+            ->where("`{$CriteriaColumn}` = %s", $CriteriaCondition)
+            ->cache($cache_time)
+            ->limit(1)
+            ->get('first')[$ColumnName];
     }
 
     public function free()
@@ -650,14 +659,14 @@ class Query
 
             if($getInsertId)// && !$update)
             { //При update даже если произошел первичный insert вернется affected_rows!
-                $ret = $this->mysqli->insert_id;
+                $ret = self::getMysqli()->insert_id;
                 $this->free();
 
                 return $ret;
             }
             else
             {
-                $result1 = $this->mysqli->affected_rows;
+                $result1 = self::getMysqli()->affected_rows;
                 $this->free();
 
                 return $result1;
@@ -683,6 +692,7 @@ class Query
         }
         $table = join('.', $newTablesArray);
 
+        $err = '';
         try
         {
             $this->CreateQuery(
@@ -697,7 +707,7 @@ class Query
             Debugger::log("SQL Error: $err");
         }
 
-        $result1 = $this->mysqli->affected_rows;
+        $result1 = self::getMysqli()->affected_rows;
         $this->free();
 
         if(!$err)
