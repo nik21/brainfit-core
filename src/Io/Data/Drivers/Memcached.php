@@ -9,7 +9,6 @@ class Memcached
 {
     use Singleton;
 
-    const PINBA_PROFILING = false;
     static protected $oInstance;
     /**
      * @var Memcached
@@ -48,23 +47,7 @@ class Memcached
 
     public function get($key)
     {
-        $obPinba = $this->createPinba('get');
-        $ret = $this->obMemcached->get($this->hash($key));
-        Pinba::timer_stop($obPinba);
-
-        return $ret;
-    }
-
-    private function createPinba($method)
-    {
-        if(!self::PINBA_PROFILING || !$method)
-            return false;
-
-        return Pinba::timer_start(array(
-            'group' => 'methods',
-            'server' => Settings::get('SERVER', 'SERVER_UNIQUE_NAME'),
-            'method' => '_memcached.'.$method
-        ));
+        return $this->obMemcached->get($this->hash($key));
     }
 
     private function hash($key)
@@ -74,47 +57,27 @@ class Memcached
 
     public function set($key, $var, $flag = 0, $expire = 0)
     {
-        $obPinba = $this->createPinba('set');
-        $ret = $this->obMemcached->set($this->hash($key), $var, $expire);
-        Pinba::timer_stop($obPinba);
-
-        return $ret;
+        return $this->obMemcached->set($this->hash($key), $var, $expire);
     }
 
     public function add($key, $var, $flag = 0, $expire = 0)
     {
-        $obPinba = $this->createPinba('add');
-        $ret = $this->obMemcached->add($this->hash($key), $var, $expire);
-        Pinba::timer_stop($obPinba);
-
-        return $ret;
+        return $this->obMemcached->add($this->hash($key), $var, $expire);
     }
 
     public function delete($key)
     {
-        $obPinba = $this->createPinba('delete');
-        $ret = $this->obMemcached->delete($this->hash($key));
-        Pinba::timer_stop($obPinba);
-
-        return $ret;
+        return $this->obMemcached->delete($this->hash($key));
     }
 
     public function increment($key, $value = 1)
     {
-        $obPinba = $this->createPinba('increment');
-        $ret = $this->obMemcached->increment($this->hash($key), $value);
-        Pinba::timer_stop($obPinba);
-
-        return $ret;
+        return $this->obMemcached->increment($this->hash($key), $value);
     }
 
     public function decrement($key, $value = 1)
     {
-        $obPinba = $this->createPinba('decrement');
-        $ret = $this->obMemcached->decrement($this->hash($key), $value);
-        Pinba::timer_stop($obPinba);
-
-        return $ret;
+        return $this->obMemcached->decrement($this->hash($key), $value);
     }
 
     public function getServerList()
