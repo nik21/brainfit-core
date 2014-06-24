@@ -27,10 +27,9 @@ abstract class Storage
 
     public static function findByIndex($aConnectionInfo, $sIndexName, $sIndexType, $sIndexValue)
     {
-        list($sStoreName, $sServerIp, $iServerPort, $iDbIndex, $sRedisPrefix) = $aConnectionInfo;
+        $aConnectionInfo = array_merge($aConnectionInfo, ['Default', 'localhost', 6379, 0, 'bf']);
 
-        if (!$sRedisPrefix)
-            $sRedisPrefix = 'bf';
+        list($sStoreName, $sServerIp, $iServerPort, $iDbIndex, $sRedisPrefix) = $aConnectionInfo;
 
         $iDbIndex = (int)$iDbIndex;
 
@@ -39,6 +38,7 @@ abstract class Storage
 
         //Init
         $obRedis = Redis::getInstance($sServerIp, $iServerPort, $iDbIndex);
+
         if ($iDbIndex)
             $obRedis->select($iDbIndex);
 
@@ -66,7 +66,7 @@ abstract class Storage
 
         foreach($aRet as $k => $v)
             $aRet[$k] = str_replace(implode('::', array_merge([$this->_sRedisPrefix, $this->className,
-                    'table', $this->getCurrentId()])) . '::', '', $v);
+                                                               'table', $this->getCurrentId()])) . '::', '', $v);
 
         return $aRet;
     }
@@ -802,12 +802,9 @@ abstract class Storage
         //Не проверять $this->redis! Всегда нужен getInstance, иначе в режиме daemon будут проблемы
 
         //Чтобы list не выдавал Notice, когда параметры переданы не все
-        $aConnectionData = array_merge($this->storageConnect(), ['Default', 'localhost', 6379, 0]);
+        $aConnectionData = array_merge($this->storageConnect(), ['Default', 'localhost', 6379, 0, 'bf']);
 
         list($sStoreName, $sServerIp, $iServerPort, $iDbIndex, $this->_sRedisPrefix) = $aConnectionData;
-
-        if (!$this->_sRedisPrefix)
-            $this->_sRedisPrefix = 'bf';
 
         $iDbIndex = (int)$iDbIndex;
 
@@ -815,6 +812,7 @@ abstract class Storage
             throw new Exception('Не указана или неверна информация о соединении');
 
         $this->redis = Redis::getInstance($sServerIp, $iServerPort, $iDbIndex);
+
         if ($iDbIndex)
             $this->redis->select($iDbIndex);
 
