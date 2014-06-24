@@ -6,16 +6,15 @@ class WebHelper
     /**
      * Create pagination arrows array
      *
-     * @param $iCurrentPage
-     * @param $iPagesArrowsCount
+     * @param int $iCurrentPage
+     * @param int $iPagesCount
+     * @param int $iSkiddingCount
      *
      * @return array
      */
-    public static function paginationMaker($iCurrentPage, $iPagesArrowsCount = 10)
+    public static function paginationMaker($iCurrentPage, $iPagesCount, $iSkiddingCount = 4)
     {
         $ret = [];
-
-        $iSkiddingCount = floor(($iPagesArrowsCount-1)/2);
 
         $iAddedRightLength = 0;
         $iMinPage = $iCurrentPage - $iSkiddingCount;
@@ -32,20 +31,20 @@ class WebHelper
 
         $iAddedLeftLength = 0;
         $iMaxPage = $iCurrentPage + $iSkiddingCount;
-        if ($iMaxPage > $iPagesArrowsCount)
+        if ($iMaxPage > $iPagesCount)
         {
-            $iAddedLeftLength = $iMaxPage-$iPagesArrowsCount;
-            $iMaxPage = $iPagesArrowsCount;
+            $iAddedLeftLength = $iMaxPage-$iPagesCount;
+            $iMaxPage = $iPagesCount;
         }
         else
         {
             //Last page yet invisible
-            $ret[$iPagesArrowsCount] = ['label'=> '...'.$iPagesArrowsCount, 'link'=> $iPagesArrowsCount];
+            $ret[$iPagesCount] = ['label'=> '...'.$iPagesCount, 'link'=> $iPagesCount];
         }
 
         $iTrueMaxPage = $iMaxPage+$iAddedRightLength;
-        if ($iTrueMaxPage > $iPagesArrowsCount)
-            $iTrueMaxPage = $iPagesArrowsCount;
+        if ($iTrueMaxPage > $iPagesCount)
+            $iTrueMaxPage = $iPagesCount;
 
         $iTrueMinPage = $iMinPage-$iAddedLeftLength;
         if ($iTrueMinPage < 1)
@@ -65,8 +64,8 @@ class WebHelper
         $ret[-1] = ['icon' => 'left', 'link' => $iCurrentPage-1, 'disabled' => $iCurrentPage <= 1];
 
         //next:
-        $ret[$iPagesArrowsCount+2] = ['icon' => 'right', 'link' => $iCurrentPage + 1,
-                                      'disabled' => $iCurrentPage >= $iPagesArrowsCount];
+        $ret[$iPagesCount+2] = ['icon' => 'right', 'link' => $iCurrentPage + 1,
+                                      'disabled' => $iCurrentPage >= $iPagesCount];
 
         ksort($ret);
 
