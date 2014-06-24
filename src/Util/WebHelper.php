@@ -3,76 +3,77 @@ namespace Brainfit\Util;
 
 class WebHelper
 {
-    public static function paginationMaker($page, $pagescount)
+    /**
+     * Create pagination arrows array
+     *
+     * @param $iCurrentPage
+     * @param $iPagesArrowsCount
+     *
+     * @return array
+     */
+    public static function paginationMaker($iCurrentPage, $iPagesArrowsCount = 10)
     {
-        $maxpagesonlink = 5;
-        /*
-         * Универсальная функция готовит список ссылок на страницы.
-         * Функция возвращает массив, элементы которого являются именованым массивом, где
-         * CAPTION -- надпись для списка ссылок
-         * PAGE -- код страницы для передачи в транзакцию (0--первая и т.д.)
-         * $page -- текущая страница, где 0 -- первая
-         * $pagescount -- всего страниц
-         * $maxpagesonlink -- страниц максимум влево и вправо
-         */
         $ret = [];
 
-        //Предыдущая
-        /*if (intval ( $page ) > 0) {
-            $ret['<<<'] = $page - 1;
-        }*/
+        $iSkiddingCount = floor(($iPagesArrowsCount-1)/2);
 
-        $iAddedRightLenght = 0;
-        $minpage = $page - 4;
-        if ($minpage <= 1)
+        $iAddedRightLength = 0;
+        $iMinPage = $iCurrentPage - $iSkiddingCount;
+        if ($iMinPage <= 1)
         {
-            $iAddedRightLenght = -$minpage+1+1;
-            $minpage = 1;
+            $iAddedRightLength = -$iMinPage+1+1;
+            $iMinPage = 1;
         }
         else
         {
-            //Первая страница уже скрылась
+            //First page already invisible...
             $ret[1] = ['label'=> '1...', 'link'=> 1];
         }
 
-        $maxpage = $page + 4;
-        if ($maxpage > $pagescount)
+        $iAddedLeftLength = 0;
+        $iMaxPage = $iCurrentPage + $iSkiddingCount;
+        if ($iMaxPage > $iPagesArrowsCount)
         {
-            $iAddedLeftLenght = $maxpage-$pagescount;
-            $maxpage = $pagescount;
+            $iAddedLeftLength = $iMaxPage-$iPagesArrowsCount;
+            $iMaxPage = $iPagesArrowsCount;
         }
         else
         {
-            //Последняя еще не видна
-            $ret[$pagescount] = ['label'=> '...'.$pagescount, 'link'=> $pagescount];
+            //Last page yet invisible
+            $ret[$iPagesArrowsCount] = ['label'=> '...'.$iPagesArrowsCount, 'link'=> $iPagesArrowsCount];
         }
 
-        $iTrueMaxPage = $maxpage+$iAddedRightLenght;
-        if ($iTrueMaxPage > $pagescount)
-            $iTrueMaxPage = $pagescount;
+        $iTrueMaxPage = $iMaxPage+$iAddedRightLength;
+        if ($iTrueMaxPage > $iPagesArrowsCount)
+            $iTrueMaxPage = $iPagesArrowsCount;
 
-        $iTrueMinPage = $minpage-$iAddedLeftLenght;
+        $iTrueMinPage = $iMinPage-$iAddedLeftLength;
         if ($iTrueMinPage < 1)
             $iTrueMinPage = 1;
 
-        for($i=$page;$i>=$iTrueMinPage;$i--)
-            $ret[$i] = ['label'=> $i, 'link'=> $i, 'selected'=>$i == $page];
+        for($i=$iCurrentPage;$i>=$iTrueMinPage;$i--)
+            $ret[$i] = ['label'=> $i, 'link'=> $i, 'selected'=>$i == $iCurrentPage];
 
-        for($i=$page;$i<=$iTrueMaxPage;$i++)
-            $ret[$i] = ['label'=> $i, 'link'=> $i, 'selected'=>$i == $page];
+        for($i=$iCurrentPage;$i<=$iTrueMaxPage;$i++)
+            $ret[$i] = ['label'=> $i, 'link'=> $i, 'selected'=>$i == $iCurrentPage];
 
         //Если страница одна, не показываем пагинацию вообще
         if (count($ret) == 1)
             return [];
 
         //prev:
-        $ret[-1] = ['icon' => 'left', 'link' => $page-1, 'disabled' => $page <= 1];
+        $ret[-1] = ['icon' => 'left', 'link' => $iCurrentPage-1, 'disabled' => $iCurrentPage <= 1];
 
         //next:
-        $ret[$pagescount+2] = ['icon' => 'right', 'link' => $page + 1, 'disabled' => $page >= $pagescount];
+        $ret[$iPagesArrowsCount+2] = ['icon' => 'right', 'link' => $iCurrentPage + 1,
+                                      'disabled' => $iCurrentPage >= $iPagesArrowsCount];
 
         ksort($ret);
 
-        return $ret;
+        $r = [];
+        foreach($ret as $item)
+            $r[] = $item;
+
+        return $r;
     }
 }
