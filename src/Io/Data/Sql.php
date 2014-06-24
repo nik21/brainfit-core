@@ -339,7 +339,7 @@ class Sql implements DataInterface
         } catch(\Exception $e)
         {
             $err = $e;
-            \Util\Debugger::log("SQL Error: $err");
+            Debugger::log("SQL Error: $err");
 
             return false;
         }

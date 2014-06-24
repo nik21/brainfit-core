@@ -21,7 +21,10 @@ class InputPost implements InputInterface
     function __construct()
     {
         //In $ _REQUEST should be required data
-        $this->buffer = & $_REQUEST;
+        $this->buffer = &$_REQUEST;
+
+        if (strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false)
+            $this->buffer = array_merge($this->buffer, json_decode(file_get_contents('php://input'), true));
     }
 
     public function getConcatParams($aExceptionsList = array())
