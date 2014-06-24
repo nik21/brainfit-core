@@ -4,6 +4,11 @@ namespace Brainfit\Io\Data;
 use Brainfit\Io\Data\Drivers\Redis;
 use Brainfit\Model\Exception;
 
+abstract class AbstractObject
+{
+    abstract public function getCurrentId();
+}
+
 /**
  * Надсройка над драйвером phpredis
  * Позволяет создавать классы, расширяемые хранилищем и реализует методы
@@ -11,8 +16,6 @@ use Brainfit\Model\Exception;
  */
 abstract class Storage
 {
-    const REDIS_PREFIX = 'bf';
-
     /**
      * @var \Redis
      */
@@ -24,27 +27,30 @@ abstract class Storage
 
     public static function findByIndex($aConnectionInfo, $sIndexName, $sIndexType, $sIndexValue)
     {
-        $sRedisPrefix = self::REDIS_PREFIX;
-        if(!$sRedisPrefix)
-            throw new Exception('Not set REDIS_PREFIX');
+        list($sStoreName, $sServerIp, $iServerPort, $iDbIndex, $sRedisPrefix) = $aConnectionInfo;
 
-        list($sStoreName, $sServerIp, $iServerPort) = $aConnectionInfo;
+        if (!$sRedisPrefix)
+            $sRedisPrefix = 'bf';
 
-        if(!$sStoreName || !$sServerIp || !$iServerPort)
+        $iDbIndex = (int)$iDbIndex;
+
+        if(!$sStoreName || !$sServerIp || !$iServerPort || $iDbIndex > 9)
             throw new Exception('Not specified correct connection information');
 
         //Init
-        $obRedis = Redis::getInstance($sServerIp, $iServerPort);
+        $obRedis = Redis::getInstance($sServerIp, $iServerPort, $iDbIndex);
+        if ($iDbIndex)
+            $obRedis->select($iDbIndex);
 
         if($sIndexType == 'primary')
         {
-            $sKey = implode('::', array($sRedisPrefix, $sStoreName, 'pk', $sIndexName, $sIndexValue));
+            $sKey = implode('::', [$sRedisPrefix, $sStoreName, 'pk', $sIndexName, $sIndexValue]);
 
             return $obRedis->get($sKey);
         }
         elseif($sIndexType == 'multi')
         {
-            $sKey = implode('::', array($sRedisPrefix, $sStoreName, 'mk', $sIndexName, $sIndexValue));
+            $sKey = implode('::', [$sRedisPrefix, $sStoreName, 'mk', $sIndexName, $sIndexValue]);
 
             return (array)$obRedis->sMembers($sKey);
         }
@@ -56,16 +62,14 @@ abstract class Storage
     {
         $this->init();
 
-        $aRet = (array)$this->redis->keys($this->getKeyName(array('table', $this->getCurrentId(), $sPattern)));
+        $aRet = (array)$this->redis->keys($this->getKeyName(['table', $this->getCurrentId(), $sPattern]));
 
         foreach($aRet as $k => $v)
-            $aRet[$k] = str_replace(implode('::', array_merge(array($this->_sRedisPrefix, $this->className,
-                    'table', $this->getCurrentId()))) . '::', '', $v);
+            $aRet[$k] = str_replace(implode('::', array_merge([$this->_sRedisPrefix, $this->className,
+                    'table', $this->getCurrentId()])) . '::', '', $v);
 
         return $aRet;
     }
-
-    //abstract function __construct($id); php 5.4
 
     abstract function getCurrentId();
 
@@ -129,7 +133,10 @@ abstract class Storage
         return $this;
     }
 
-    public function sDiff($sObjectConstructor, $sField, $sField2, $sFieldN = null)
+    public function sDiff($sObjectConstructor, /** @noinspection PhpUnusedParameterInspection */
+                          $sField, /** @noinspection PhpUnusedParameterInspection */
+                          $sField2, /** @noinspection PhpUnusedParameterInspection */
+                          $sFieldN = null)
     {
         $this->init();
 
@@ -158,7 +165,10 @@ abstract class Storage
         return $ret;
     }
 
-    public function sInter($sObjectConstructor, $sField, $sField2, $sFieldN = null)
+    public function sInter($sObjectConstructor, /** @noinspection PhpUnusedParameterInspection */
+                           $sField, /** @noinspection PhpUnusedParameterInspection */
+                           $sField2, /** @noinspection PhpUnusedParameterInspection */
+                           $sFieldN = null)
     {
         $this->init();
 
@@ -247,6 +257,7 @@ abstract class Storage
     {
         $this->init();
 
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
@@ -268,6 +279,7 @@ abstract class Storage
         $this->init();
         $keyName = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
 
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
@@ -281,6 +293,7 @@ abstract class Storage
         $this->init();
         $keyName = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
 
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
@@ -400,7 +413,8 @@ abstract class Storage
         return $ret;
     }
 
-    public function interStore($aKeys, $withScores = false,
+    public function interStore($aKeys, /** @noinspection PhpUnusedParameterInspection */
+                               $withScores = false,
                                $sDestination = null, $bUnion = false, $aggregateFunction = 'SUM')
     {
         $bIsAssoc = (is_array($aKeys) && count(array_filter(array_keys($aKeys), 'is_string')) == count($aKeys));
@@ -430,13 +444,11 @@ abstract class Storage
             }
         }
 
-
         //TODO: Добавить возврат объектов
         if(!$bUnion)
             return $this->redis->zInter($sDestinationKey, $aFullKeys, $aWeights, $aggregateFunction);
         else
             return $this->redis->zUnion($sDestinationKey, $aFullKeys, $aWeights, $aggregateFunction);
-        //return call_user_func_array(array($this->redis,'zInter'), $aFullKeys);
     }
 
     /**
@@ -547,6 +559,7 @@ abstract class Storage
     {
         $this->init();
 
+        /** @var $sIndexValue AbstractObject */
         if(is_object($sIndexValue))
             $sVal = $sIndexValue->getCurrentId();
         else
@@ -573,6 +586,7 @@ abstract class Storage
     {
         $this->init();
 
+        /** @var $sIndexValue AbstractObject */
         if(is_object($sIndexValue))
             $sVal = $sIndexValue->getCurrentId();
         else
@@ -783,14 +797,17 @@ abstract class Storage
         return $this->currentId;
     }
 
-    private function init($bLoadObject = false)
+    private function init()
     {
         //Не проверять $this->redis! Всегда нужен getInstance, иначе в режиме daemon будут проблемы
 
         //Чтобы list не выдавал Notice, когда параметры переданы не все
         $aConnectionData = array_merge($this->storageConnect(), ['Default', 'localhost', 6379, 0]);
 
-        list($sStoreName, $sServerIp, $iServerPort, $iDbIndex) = $aConnectionData;
+        list($sStoreName, $sServerIp, $iServerPort, $iDbIndex, $this->_sRedisPrefix) = $aConnectionData;
+
+        if (!$this->_sRedisPrefix)
+            $this->_sRedisPrefix = 'bf';
 
         $iDbIndex = (int)$iDbIndex;
 
@@ -802,10 +819,6 @@ abstract class Storage
             $this->redis->select($iDbIndex);
 
         $this->className = $sStoreName;
-
-        $this->_sRedisPrefix = self::REDIS_PREFIX;
-        if(!$this->_sRedisPrefix)
-            throw new Exception('Не задан REDIS_PREFIX');
     }
 
     abstract function storageConnect();
@@ -822,7 +835,7 @@ abstract class Storage
         if(!is_array($keys))
             $keys = array($keys);
 
-        $sKey = implode('::', array_merge(array($this->_sRedisPrefix, $this->className), $keys));
+        $sKey = implode('::', array_merge([$this->_sRedisPrefix, $this->className], $keys));
 
         return $sKey;
     }
@@ -864,7 +877,7 @@ abstract class Storage
 
         $keyName = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
 
-
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
@@ -882,6 +895,7 @@ abstract class Storage
 
         $keyName = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
 
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
@@ -898,6 +912,7 @@ abstract class Storage
 
         $keyName = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
 
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
@@ -1048,7 +1063,7 @@ abstract class Storage
         $keyName = $this->getKeyName(array('table', $this->getCurrentId(), $sFieldName));
 
         if(!count($aList))
-            return;
+            return $this;
 
         //Задача не из легких — много команд или в большую команду (не ниже Redis 2.4)
         //Будем добавлять по 500 штук в multi
@@ -1109,6 +1124,7 @@ abstract class Storage
 
         $keyName = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
 
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
@@ -1147,6 +1163,7 @@ abstract class Storage
         $sDestinationFieldName = $this->getKeyName(array('table',
                                                          $this->getCurrentId(), $sDestinationFieldName));
 
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
@@ -1162,6 +1179,7 @@ abstract class Storage
 
         $keyName = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
 
+        /** @var $object AbstractObject */
         if(is_object($object))
             $fieldValue = $object->getCurrentId();
         else
