@@ -13,7 +13,7 @@ class Query
 {
     private $sServerName;
 
-    public $profilingInfo = '';
+    public static $profilingInfo = [];
 
     /** @var  \mysqli */
     private static $mysqli = null;
@@ -291,6 +291,7 @@ class Query
 
     public function get($sType = 'matrix')
     {
+        $this->prepareSql('select');
         $this->prepareResult();
 
         if($sType == 'first')
@@ -319,13 +320,19 @@ class Query
      * @param callable $obLoader
      * @return array
      */
-    public function load(callable $obLoader)
+    public function load(callable $obLoader, $sFieldNameForFactory = null)
     {
+        $this->prepareSql('select');
         $this->prepareResult();
 
         $aRet = [];
         foreach($this->aResult as $v)
-            $aRet[] = $obLoader($v);
+        {
+            if (!is_null($sFieldNameForFactory))
+                $aRet[] = $obLoader($v[$sFieldNameForFactory]);
+            else
+                $aRet[] = $obLoader($v);
+        }
 
         return $aRet;
     }
@@ -335,18 +342,18 @@ class Query
         return $this->iCalcFoundRows;
     }
 
-    private function prepareResult()
+    private function prepareSql($mainAction)
     {
-        //        if ($this->bAlreadyGet)
-        //            throw new Exception('Need call "createCommand" before execute new query');
-        //
-        //        $this->bAlreadyGet = true;
-
         //The resulting query
-        $this->sResultSql = 'SELECT '.($this->bDistinct ? 'DISTINCT ' : '');
+        if ($mainAction == 'select')
+        {
+            $this->sResultSql = 'SELECT '.($this->bDistinct ? 'DISTINCT ' : '');
 
-        //Collect the required fields:
-        $this->sResultSql .= implode(', ', $this->aFields);
+            //Collect the required fields:
+            $this->sResultSql .= implode(', ', $this->aFields);
+        }
+        else if ($mainAction == 'delete')
+            $this->sResultSql = 'DELETE ';
 
         //Collect tables
         $aResult = [];
@@ -373,22 +380,23 @@ class Query
             $this->sResultSql .= " LIMIT ".$this->aOtherParams['offset'].", ".$this->aOtherParams['limit'];
         elseif($this->aOtherParams['limit'])
             $this->sResultSql .= " LIMIT ".$this->aOtherParams['limit'];
+    }
+
+    private function prepareResult()
+    {
+        if (!$this->sResultSql)
+            throw new Exception('Invalid call sequence');
 
         //maybe from cache
         $sCacheKey = sha1($this->sResultSql);
         $iCache = (int)$this->aOtherParams['cache'];
 
-        //profiling:
-        $this->profilingInfo[] = [
-            'query' => $this->sResultSql,
-            'cache' => $iCache,
-            'from cache' => false
-        ];
-
         if ($iCache && !apc_add($sCacheKey, 1, $iCache))
         {
             $this->aResult = (array)apc_fetch($sCacheKey.'v');
             $this->iCalcFoundRows = (int)apc_fetch($sCacheKey.'f');
+
+            $this->saveForProfiling($this->sResultSql, 'from cache');
 
             //debug:
             if ($sDumpName = $this->aOtherParams['getDump'])
@@ -397,6 +405,8 @@ class Query
 
             return;
         }
+
+        $this->saveForProfiling($this->sResultSql, 'direct query');
 
         //Begin
         $this->CreateQuery($this->sResultSql, !$this->aOtherParams['foundRows']);
@@ -460,6 +470,11 @@ class Query
             apc_store($sCacheKey.'v', $this->aResult, $iCache*2);
             apc_store($sCacheKey.'f', $this->iCalcFoundRows, $iCache*2);
         }
+    }
+
+    private function saveForProfiling($sSql, $sGroupName)
+    {
+        self::$profilingInfo[$this->sServerName][$sGroupName][] = $sSql;
     }
 
     public function dump($sDescription = 'query')
@@ -538,12 +553,12 @@ class Query
     public function lookup($ColumnName, $TableName, $CriteriaColumn, $CriteriaCondition, $cache_time = 0)
     {
         return $this
-            ->select($ColumnName)
-            ->from($TableName)
-            ->where("`{$CriteriaColumn}` = %s", $CriteriaCondition)
-            ->cache($cache_time)
-            ->limit(1)
-            ->get('first')[$ColumnName];
+                   ->select($ColumnName)
+                   ->from($TableName)
+                   ->where("`{$CriteriaColumn}` = %s", $CriteriaCondition)
+                   ->cache($cache_time)
+                   ->limit(1)
+                   ->get('first')[$ColumnName];
     }
 
     public function free()
@@ -553,35 +568,12 @@ class Query
         $this->_foundRows = 0;
     }
 
-    public function delete($table, $criteriaField, $criteria)
+    public function delete()
     {
-        $tablesArray = mb_split('\.', $table);
+        $this->prepareSql('delete');
 
-        $newTablesArray = array();
-        foreach($tablesArray as $t)
-        {
-            $newTablesArray[] = "`{$t}`";
-        }
-        $table = join('.', $newTablesArray);
-
-        try
-        {
-            //TODO: Защиту
-            $this->CreateQuery(
-                "DELETE FROM {$table} WHERE `{$criteriaField}` = '{$criteria}'",
-                true
-            );
-
-            $this->free();
-
-            return true;
-        } catch(\Exception $e)
-        {
-            $err = $e;
-            Debugger::log("SQL Error: $err");
-
-            return false;
-        }
+        $this->CreateQuery($this->sResultSql, true);
+        $this->free();
     }
 
     public function insert($table, $fields, $getInsertId = false, $update = false, $ignore = false)
