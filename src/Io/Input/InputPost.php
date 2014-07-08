@@ -23,7 +23,7 @@ class InputPost implements InputInterface
         //In $ _REQUEST should be required data
         $this->buffer = &$_REQUEST;
 
-        if (strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false)
+        if (isset($_SERVER['CONTENT_TYPE']) && strpos($_SERVER['CONTENT_TYPE'], 'application/json') !== false)
             $this->buffer = array_merge($this->buffer, json_decode(file_get_contents('php://input'), true));
     }
 
@@ -42,6 +42,22 @@ class InputPost implements InputInterface
     public function getParam($sName, $iParamType = VALIDATOR_STRING, $bObligatory = false, $iErrorCode = 0,
                              $sErrorDescription = '')
     {
+        $ret = $this->buffer[$sName];
+
+        //external type checker
+        if (!is_numeric($iParamType) && is_callable($iParamType))
+        {
+            if ($bObligatory && !isset($this->buffer[$sName]))
+            {
+                if(!$sErrorDescription)
+                    $sErrorDescription = 'No field '.$sName.'. Request: '.print_r($this->buffer, true);
+
+                throw new Exception($sErrorDescription, $iErrorCode);
+            }
+            return $iParamType($ret);
+        }
+
+        //internal type checker
         $bReturnNullIfEmpty = false;
 
         if($iParamType >= VALIDATOR_OR_NULL)
@@ -50,7 +66,7 @@ class InputPost implements InputInterface
                 throw new Exception('You can not specify that the field is required if current returns null');
 
             $bReturnNullIfEmpty = true;
-            $iParamType -= 1000;
+            $iParamType -= VALIDATOR_OR_NULL;
         }
 
         if($bReturnNullIfEmpty && !isset($this->buffer[$sName]))
@@ -64,7 +80,7 @@ class InputPost implements InputInterface
             throw new Exception($sErrorDescription, $iErrorCode);
         }
 
-        $ret = $this->buffer[$sName];
+
 
         switch($iParamType)
         {
