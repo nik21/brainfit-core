@@ -200,7 +200,7 @@ class Query
 
         $sVariable = preg_replace_callback("/(%[siaw])/", [$this, 'variable_check2'], $sVariable);
 
-        $this->sJoins = $sDirection.' join '.$sTableName.' '.$sSuffix.' on '.$sVariable;
+        $this->sJoins .= ' '. $sDirection.' join '.$sTableName.' '.$sSuffix.' on '.$sVariable;
 
         return $this;
     }
