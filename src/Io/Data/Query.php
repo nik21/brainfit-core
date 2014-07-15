@@ -282,6 +282,10 @@ class Query
         return $this;
     }
 
+    /**
+     * @param $iTime int        When -1 — existing cache cleaning
+     * @return $this
+     */
     public function cache($iTime)
     {
         $this->aOtherParams['cache'] = $iTime;
@@ -391,7 +395,7 @@ class Query
         $sCacheKey = sha1($this->sResultSql);
         $iCache = (int)$this->aOtherParams['cache'];
 
-        if ($iCache && !apc_add($sCacheKey, 1, $iCache))
+        if ($iCache > 0 && !apc_add($sCacheKey, 1, $iCache))
         {
             $this->aResult = (array)apc_fetch($sCacheKey.'v');
             $this->iCalcFoundRows = (int)apc_fetch($sCacheKey.'f');
@@ -406,7 +410,13 @@ class Query
             return;
         }
 
-        $this->saveForProfiling($this->sResultSql, 'direct query');
+        if ($iCache == -1)
+        {
+            apc_delete([$sCacheKey.'v', $sCacheKey.'f']);
+            $this->saveForProfiling($this->sResultSql, 'clean cache query');
+        }
+        else
+            $this->saveForProfiling($this->sResultSql, 'direct query');
 
         //Begin
         $this->CreateQuery($this->sResultSql, !$this->aOtherParams['foundRows']);
@@ -553,12 +563,12 @@ class Query
     public function lookup($ColumnName, $TableName, $CriteriaColumn, $CriteriaCondition, $cache_time = 0)
     {
         return $this
-                   ->select($ColumnName)
-                   ->from($TableName)
-                   ->where("`{$CriteriaColumn}` = %s", $CriteriaCondition)
-                   ->cache($cache_time)
-                   ->limit(1)
-                   ->get('first')[$ColumnName];
+            ->select($ColumnName)
+            ->from($TableName)
+            ->where("`{$CriteriaColumn}` = %s", $CriteriaCondition)
+            ->cache($cache_time)
+            ->limit(1)
+            ->get('first')[$ColumnName];
     }
 
     public function free()
