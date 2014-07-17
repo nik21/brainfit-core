@@ -101,7 +101,7 @@ class Elasticsearch
 
                 $ret = $this->obElasticSearch->bulk($params);
 
-                if(!$ret || !$ret['took'])
+                if(!$ret || $ret['error'])
                     Debugger::log('Elasticsearch problems', 'Upsert trouble', $ret);
             }
         }
