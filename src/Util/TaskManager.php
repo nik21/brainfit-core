@@ -2,6 +2,7 @@
 namespace Brainfit\Util;
 
 use Brainfit\Api\MethodWrapper;
+use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Io\Input\InputFake;
 use Brainfit\Model\Exception;
 use Brainfit\Service\ServiceFactory;
@@ -187,7 +188,9 @@ class TaskManager
     {
         $sProblem = '';
 
-        $aData = apc_cache_info();
+        $obApc = Apc::getInstance();
+        $aData = $obApc->getCacheInfo();
+
         if(!$aData['stime'])
             $sProblem = "Need add \"apc.enable_cli\" option\n";
 

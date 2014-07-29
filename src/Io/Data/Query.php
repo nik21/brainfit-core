@@ -1,6 +1,7 @@
 <?php
 namespace Brainfit\Io\Data;
 
+use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Model\Exception;
 use Brainfit\Settings;
 use Brainfit\Util\Debugger;
@@ -395,10 +396,12 @@ class Query
         $sCacheKey = sha1($this->sResultSql);
         $iCache = (int)$this->aOtherParams['cache'];
 
-        if ($iCache > 0 && !apc_add($sCacheKey, 1, $iCache))
+        $obApc = Apc::getInstance();
+
+        if ($iCache > 0 && !$obApc->add($sCacheKey, 1, $iCache))
         {
-            $this->aResult = (array)apc_fetch($sCacheKey.'v');
-            $this->iCalcFoundRows = (int)apc_fetch($sCacheKey.'f');
+            $this->aResult = (array)$obApc->fetch($sCacheKey.'v');
+            $this->iCalcFoundRows = (int)$obApc->fetch($sCacheKey.'f');
 
             $this->saveForProfiling($this->sResultSql, 'from cache');
 
@@ -412,7 +415,7 @@ class Query
 
         if ($iCache == -1)
         {
-            apc_delete([$sCacheKey.'v', $sCacheKey.'f']);
+            $obApc->delete([$sCacheKey.'v', $sCacheKey.'f']);
             $this->saveForProfiling($this->sResultSql, 'clean cache query');
         }
         else
@@ -477,8 +480,8 @@ class Query
 
         if ($iCache)
         {
-            apc_store($sCacheKey.'v', $this->aResult, $iCache*2);
-            apc_store($sCacheKey.'f', $this->iCalcFoundRows, $iCache*2);
+            $obApc->store($sCacheKey.'v', $this->aResult, $iCache*2);
+            $obApc->store($sCacheKey.'f', $this->iCalcFoundRows, $iCache*2);
         }
     }
 

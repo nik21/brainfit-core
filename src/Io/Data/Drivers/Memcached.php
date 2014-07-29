@@ -13,10 +13,16 @@ class Memcached
     /**
      * @var Memcached
      */
+
+    private $bDisabled = false;
+
     private $obMemcached;
 
     function __construct()
     {
+        if ($this->bDisabled = (bool)Settings::get('MEMCACHED', 'disabled'))
+            return;
+
         $aServers = (array)Settings::get('MEMCACHED', 'servers');
         if (!$aServers)
             throw new Exception('Empty memcached servers config');
@@ -47,41 +53,62 @@ class Memcached
 
     public function get($key)
     {
+        if ($this->bDisabled)
+            return false;
+
         return $this->obMemcached->get($this->hash($key));
     }
 
     private function hash($key)
     {
-        return Settings::get('SERVER', 'API_MEMCACHE_KEY').'%'.hash('sha512', $key);
+        return Settings::get('MEMCACHED', 'key').'%'.hash('sha512', $key);
     }
 
     public function set($key, $var, $flag = 0, $expire = 0)
     {
+        if ($this->bDisabled)
+            return true;
+
         return $this->obMemcached->set($this->hash($key), $var, $expire);
     }
 
     public function add($key, $var, $flag = 0, $expire = 0)
     {
+        if ($this->bDisabled)
+            return true;
+
         return $this->obMemcached->add($this->hash($key), $var, $expire);
     }
 
     public function delete($key)
     {
+        if ($this->bDisabled)
+            return true;
+
         return $this->obMemcached->delete($this->hash($key));
     }
 
     public function increment($key, $value = 1)
     {
+        if ($this->bDisabled)
+            return 1;
+
         return $this->obMemcached->increment($this->hash($key), $value);
     }
 
     public function decrement($key, $value = 1)
     {
+        if ($this->bDisabled)
+            return 0;
+
         return $this->obMemcached->decrement($this->hash($key), $value);
     }
 
     public function getServerList()
     {
+        if ($this->bDisabled)
+            return [];
+
         return $this->obMemcached->getServerList();
     }
 }

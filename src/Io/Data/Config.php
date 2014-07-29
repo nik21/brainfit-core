@@ -2,6 +2,7 @@
 
 namespace Brainfit\Io\Data;
 
+use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Model\Exception;
 
 class Config
@@ -12,31 +13,30 @@ class Config
 
     public static function get($aFiles)
     {
-        $sIdentificator = '';
+        $sFilesChecksum = '';
         foreach($aFiles as $sFilename)
         {
             $sMd5 = md5_file($sFilename);
             if (!$sMd5)
                 throw new Exception('Invalid MD5 checksum for file '.$sFilename);
 
-            $sIdentificator .= $sMd5.'+';
+            $sFilesChecksum .= $sMd5.'+';
         }
 
-        $sIdentificator = self::KEY.sha1($sIdentificator);
+        $sFilesChecksum = self::KEY.sha1($sFilesChecksum);
 
-        if(isset(self::$aConfig[$sIdentificator]))
-            return self::$aConfig[$sIdentificator];
+        if(isset(self::$aConfig[$sFilesChecksum]))
+            return self::$aConfig[$sFilesChecksum];
 
-
-        if(!apc_exists($sIdentificator))
+        if(!apc_exists($sFilesChecksum))
         {
-            self::$aConfig[$sIdentificator] = self::getConfig($aFiles);
-            apc_store($sIdentificator, self::$aConfig[$sIdentificator]);
+            self::$aConfig[$sFilesChecksum] = self::getConfig($aFiles);
+            apc_store($sFilesChecksum, self::$aConfig[$sFilesChecksum]);
         }
         else
-            self::$aConfig[$sIdentificator] = apc_fetch($sIdentificator);
+            self::$aConfig[$sFilesChecksum] = apc_fetch($sFilesChecksum);
 
-        return self::$aConfig[$sIdentificator];
+        return self::$aConfig[$sFilesChecksum];
     }
 
     private static function getConfig($aFiles)
