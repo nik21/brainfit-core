@@ -1,6 +1,7 @@
 <?php
 namespace Brainfit\Io\Data;
 
+use PDO;
 use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Model\Exception;
 use Brainfit\Settings;
@@ -16,12 +17,13 @@ class Query
 
     public static $profilingInfo = [];
 
-    /** @var  \mysqli */
-    private static $mysqli = null;
+    /** @var  \PDO */
+    private static $dbh = null;
 
-    /** @var  \mysqli_result */
-    private $result;
+    /** @var  \PDOStatement */
+    private $stmp;
     private $_foundRows;
+    private $aExecuteValues = null;
 
     private $aTables = [];
     private $aFields = [];
@@ -55,12 +57,12 @@ class Query
     }
 
     /**
-     * @return \mysqli
+     * @return \PDO
      * @throws \Brainfit\Model\Exception
      */
-    private function getMysqli()
+    private function getPdo()
     {
-        if (is_null(self::$mysqli))
+        if (is_null(self::$dbh))
         {
             if (!$sServer = Settings::get('MYSQL', 'servers', $this->sServerName, 'server'))
                 throw new Exception('Mysql server with id '.$this->sServerName.' not found in config file');
@@ -70,22 +72,30 @@ class Query
             $sDefaultDb = Settings::get('MYSQL', 'servers', $this->sServerName, 'db');
             $bUseUtf8 = Settings::get('MYSQL', 'switchToUTF8');
 
-            self::$mysqli = new \mysqli($sServer, $sUser, $sPassword, $sDefaultDb);
+            try
+            {
+                //$driver_options = [PDO::MYSQL_ATTR_INIT_COMMAND => "SET names = 'utf-8', lc_time_names = 'ru_RU',time_zone = 'Europe/Moscow'"];
+                $driver_options = [PDO::ATTR_PERSISTENT => false];
 
-            if(mysqli_connect_errno())
-                throw new Exception('Mysql connection error: '.mysqli_connect_error().': ' .mysqli_connect_errno());
-
-            if($bUseUtf8)
-                self::$mysqli->set_charset('utf8');
+                //not usage MYSQL_ATTR_INIT_COMMAND and SET character_set_results = 'utf8' and other.. This is not safe!
+                self::$dbh = new \PDO("mysql:host={$sServer};dbname={$sDefaultDb};charset=UTF8", $sUser, $sPassword,
+                    $driver_options);
+            }
+            catch(\PDOException $e) {
+                throw new Exception($e->getMessage(), $e->getCode());
+            }
         }
 
-        return self::$mysqli;
+        return self::$dbh;
     }
 
     public function escape($data)
     {
+        //see http://stackoverflow.com/questions/134099/are-pdo-prepared-statements-sufficient-to-prevent-sql-injection
+        mysql_query('SET NAMES utf8');
+        return mysql_real_escape_string($data);
         //Подключение к БД может снижать производительность
-        return self::getMysqli()->real_escape_string($data);
+        return self::getPdo()->quote($data);
     }
 
     public function calcFoundRows()
@@ -259,8 +269,13 @@ class Query
 
     private function escapeString($value)
     {
-        if($value === NULL)
-            return 'NULL';
+        //if($value === NULL)
+        //    return 'NULL';
+
+
+        $this->iImId++;
+        $this->aExecuteValues[':strim'.$this->iImId] = $value;
+        return ':strim'.$this->iImId;
 
         return "'".$this->escape($value)."'";
     }
@@ -393,7 +408,7 @@ class Query
             throw new Exception('Invalid call sequence');
 
         //maybe from cache
-        $sCacheKey = sha1($this->sResultSql);
+        $sCacheKey = sha1($this->sResultSql.implode(array_values($this->aExecuteValues)));
         $iCache = (int)$this->aOtherParams['cache'];
 
         $obApc = Apc::getInstance();
@@ -422,46 +437,57 @@ class Query
             $this->saveForProfiling($this->sResultSql, 'direct query');
 
         //Begin
-        $this->CreateQuery($this->sResultSql, !$this->aOtherParams['foundRows']);
+        $this->CreateQuery($this->sResultSql, !$this->aOtherParams['foundRows'], $this->aExecuteValues);
 
         $matrix = [];
-        $k = 0;
-        $fields = $this->result->fetch_fields(); //TODO: cache this
 
-        //Parse
+        //field types
         $aFields = [];
-        foreach($fields as $field)
-            $aFields[$field->name] = $field;
+        for($i=0;$i<1000;$i++)
+        {
+            if (!$aMetaInfo = $this->stmp->getColumnMeta($i))
+                break;
 
-        while($row = $this->result->fetch_array(MYSQLI_ASSOC))
+            $aFields[$aMetaInfo['name']] = $aMetaInfo['native_type']; //pdo_type
+        }
+
+        $k = 0;
+        while($row = $this->stmp->fetch(PDO::FETCH_ASSOC))
         {
             $matrix[$k] = $row;
 
             //Change some rows types:
-            foreach($aFields as $field)
+            foreach($aFields as $field=>$type)
             {
-                switch ( $field->type )
+                switch ( $type )
                 {
                     // Convert INT to an integer.
-                    case MYSQLI_TYPE_TINY:
-                    case MYSQLI_TYPE_SHORT:
-                    case MYSQLI_TYPE_LONG:
-                    case MYSQLI_TYPE_LONGLONG:
-                    case MYSQLI_TYPE_INT24:
-                        $matrix[$k][$field->name] = intval($matrix[$k][$field->name]);
+                    case 'LONG':
+                    case 'LONGLONG':
+                    case 'TINY':
+                    case 'SHORT':
+                    case 'INT24':
+                        $matrix[$k][$field] = intval($matrix[$k][$field]);
                         break;
                     // Convert FLOAT to a float.
-                    case MYSQLI_TYPE_FLOAT:
-                    case MYSQLI_TYPE_DOUBLE:
-                        $matrix[$k][$field->name] = floatval($matrix[$k][$field->name]);
+                    case 'FLOAT':
+                    case 'NEWDECIMAL':
+                    case 'DOUBLE':
+                        $matrix[$k][$field] = floatval($matrix[$k][$field]);
                         break;
-                    // Convert TIMESTAMP to a DateTime object.
-                    /*case MYSQLI_TYPE_TIMESTAMP:
-                    case MYSQLI_TYPE_DATE:
-                    case MYSQLI_TYPE_DATETIME:
-                        $obTemp = new \DateTime($matrix[$k][$field->name]);
-                        $matrix[$k][$field->name] = $obTemp->getTimestamp();
-                        break;*/
+                    case 'TIMESTAMP':
+                    case 'DATE':
+                    case 'DATETIME':
+                        /*$obTemp = new \DateTime($matrix[$k][$field->name]);
+                        $matrix[$k][$field->name] = $obTemp->getTimestamp();*/
+                        break;
+                    case 'VAR_STRING':
+                    case 'STRING':
+                    case 'BLOB';
+                        break;
+                    default:
+                        //echo $type.'|';
+                        break;
                 }
             }
 
@@ -505,13 +531,13 @@ class Query
     {
         $this->CreateQuery($strSQL, true);
 
-        $result1 = self::getMysqli()->affected_rows;
+        $result1 = $this->stmp->rowCount();
         $this->free();
 
         return $result1;
     }
 
-    private function CreateQuery($strSQLQuery, $foundRowsDisable = false)
+    private function CreateQuery($strSQLQuery, $foundRowsDisable = false, $params = null)
     {
         if(!$strSQLQuery)
             return 0;
@@ -525,39 +551,30 @@ class Query
                 //Если включено лимитирование и это инструкция SELECT, то посчитать, при условии разрешения
                 $calc_found_rows_enable = 1;
 
-                $strSQLQuery = mb_eregi_replace("(^SELECT)(.*)", "SELECT SQL_CALC_FOUND_ROWS\\2;SELECT FOUND_ROWS();", $strSQLQuery);
+                $strSQLQuery = mb_eregi_replace("(^SELECT)(.*)", "SELECT SQL_CALC_FOUND_ROWS\\2", $strSQLQuery);
             }
         }
 
-        if(self::getMysqli()->multi_query($strSQLQuery))
+
+        try
         {
-            do
+            if (!$stmt = self::getPdo()->prepare($strSQLQuery))
+                throw new Exception('Problem when prepare query');
+
+            $stmt->execute($params);
+            $this->stmp = $stmt;
+
+            if($calc_found_rows_enable)
             {
-                /* store first result set */
-
-                $this->result = self::getMysqli()->store_result();
-
-
-                if($calc_found_rows_enable)
-                {
-                    if(self::getMysqli()->more_results() && self::getMysqli()->next_result())
-                    {
-                        list($total) = self::getMysqli()->store_result()->fetch_row();
-                        $this->_foundRows = $total;
-                    }
-                }
-                else
-                    $this->_foundRows = is_object($this->result) ? $this->result->num_rows : 0;
-
-
-            } while(self::getMysqli()->more_results() && self::getMysqli()->next_result());
-
-
-        }
-        else
-        {
-            Debugger::log('Mysql error:', self::getMysqli()->error, 'Query:', $strSQLQuery);
-            throw new Exception('Mysql error #'.self::getMysqli()->errno, 1);
+                $sql = "select found_rows();";
+                if (!$stmt2 = self::getPdo()->query($sql))
+                    throw new Exception('Problem when prepare "found_rows" query');
+                $this->_foundRows = (int)$stmt2->fetch(PDO::FETCH_COLUMN);
+                $stmt2->closeCursor();
+            }
+        }catch(\PDOException $e) {
+            Debugger::log('Mysql error:', self::getPdo()->error, 'Query:', $strSQLQuery);
+            throw new Exception('Mysql error #'.$e->getCode(), 1);
         }
 
         return 1;
@@ -566,18 +583,19 @@ class Query
     public function lookup($ColumnName, $TableName, $CriteriaColumn, $CriteriaCondition, $cache_time = 0)
     {
         return $this
-            ->select($ColumnName)
-            ->from($TableName)
-            ->where("`{$CriteriaColumn}` = %s", $CriteriaCondition)
-            ->cache($cache_time)
-            ->limit(1)
-            ->get('first')[$ColumnName];
+                   ->select($ColumnName)
+                   ->from($TableName)
+                   ->where("`{$CriteriaColumn}` = %s", $CriteriaCondition)
+                   ->cache($cache_time)
+                   ->limit(1)
+                   ->get('first')[$ColumnName];
     }
 
     public function free()
     {
-        if($this->result)
-            $this->result->free();
+        if($this->stmp)
+            $this->stmp->closeCursor();
+
         $this->_foundRows = 0;
     }
 
@@ -585,7 +603,7 @@ class Query
     {
         $this->prepareSql('delete');
 
-        $this->CreateQuery($this->sResultSql, true);
+        $this->CreateQuery($this->sResultSql, true, $this->aExecuteValues);
         $this->free();
     }
 
@@ -658,20 +676,21 @@ class Query
                 ") VALUES (".
                 join(',', $updateValues).
                 "){$added_update_sql};",
-                true
+                true,
+                $this->aExecuteValues
             );
 
 
             if($getInsertId)// && !$update)
             { //При update даже если произошел первичный insert вернется affected_rows!
-                $ret = self::getMysqli()->insert_id;
+                $ret = self::getPdo()->lastInsertId();
                 $this->free();
 
                 return $ret;
             }
             else
             {
-                $result1 = self::getMysqli()->affected_rows;
+                $result1 = $this->stmp->rowCount();
                 $this->free();
 
                 return $result1;
@@ -712,7 +731,7 @@ class Query
             Debugger::log("SQL Error: $err");
         }
 
-        $result1 = self::getMysqli()->affected_rows;
+        $result1 = $this->stmp->rowCount();
         $this->free();
 
         if(!$err)
