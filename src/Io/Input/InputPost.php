@@ -92,7 +92,8 @@ class InputPost implements InputInterface
                 if($ret < 0)
                     $ret = 0;
                 if($bObligatory && !$ret)
-                    throw new Exception($sErrorDescription, $iErrorCode);
+                    throw new Exception($sErrorDescription ? $sErrorDescription :
+                        'Ibligatory empty integer positive type', $iErrorCode);
 
                 return $ret;
                 break;
@@ -108,7 +109,8 @@ class InputPost implements InputInterface
                     $ret = filter_var($ret, FILTER_VALIDATE_IP);
 
                     if(!$ret)
-                        throw new Exception($sErrorDescription, $iErrorCode);
+                        throw new Exception($sErrorDescription ? $sErrorDescription : 'Invalid ip address type',
+                            $iErrorCode);
                 }
 
                 return $ret;
@@ -116,7 +118,7 @@ class InputPost implements InputInterface
                 break;
             case VALIDATOR_SESSION:
                 if($ret && !Strings::checker($ret, 'session'))
-                    throw new Exception($sErrorDescription, $iErrorCode);
+                    throw new Exception($sErrorDescription ? $sErrorDescription : 'Invalid session type', $iErrorCode);
                 break;
             case VALIDATOR_DATA: //При FakeInput — это массив, если передавали параметр
                 return (array)$ret;
@@ -129,7 +131,7 @@ class InputPost implements InputInterface
                 break;
             case VALIDATOR_PHONE:
                 if(!$ret || !Strings::checker($ret, 'phone'))
-                    throw new Exception($sErrorDescription, $iErrorCode);
+                    throw new Exception($sErrorDescription ? $sErrorDescription : 'Invalid phone type', $iErrorCode);
                 break;
             default:
                 if(mb_strlen($ret) > 4096)
