@@ -1,11 +1,11 @@
 <?php
 namespace Brainfit\Io\Data;
 
-use PDO;
 use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Model\Exception;
 use Brainfit\Settings;
 use Brainfit\Util\Debugger;
+use PDO;
 
 /**
  * Class Query
@@ -21,26 +21,20 @@ class Query
     private static $dbh = null;
 
     /** @var  \PDOStatement */
-    private $stmp;
-    private $_foundRows;
-    private $aExecuteValues = null;
+    private $obStmp;
 
-    private $aTables = [];
-    private $aFields = [];
-    private $bDistinct = false;
-    private $sWhere = null;
-    private $sJoins = null;
-    private $sHaving = null;
-    private $sResultSql = null;
-    private $aResult = null;
-    private $aOtherParams = [];
-    private $aOrderBy = [];
-    private $aGroupBy = [];
-
+    //escape-builder:
     private $aLoadedValues = null;
     private $iPointer = 0;
 
+    //query builder:
+    private $aBuilder = [];
+    private $aExecuteValues = null;
+    private $iExecuteValueCounter = 0; //params id's counter
+
+    //result:
     private $iCalcFoundRows = 0;
+
 
     public function __construct($sServerName)
     {
@@ -49,6 +43,7 @@ class Query
 
     /**
      * @param string $sServerName
+     *
      * @return self
      */
     public static function create($sServerName = 'main')
@@ -62,26 +57,28 @@ class Query
      */
     private function getPdo()
     {
-        if (is_null(self::$dbh))
+        if(is_null(self::$dbh))
         {
-            if (!$sServer = Settings::get('MYSQL', 'servers', $this->sServerName, 'server'))
-                throw new Exception('Mysql server with id '.$this->sServerName.' not found in config file');
+            if(!$sServer = Settings::get('MYSQL', 'servers', $this->sServerName, 'server'))
+                throw new Exception('Mysql server with id ' . $this->sServerName . ' not found in config file');
 
             $sUser = Settings::get('MYSQL', 'servers', $this->sServerName, 'login');
             $sPassword = Settings::get('MYSQL', 'servers', $this->sServerName, 'password');
             $sDefaultDb = Settings::get('MYSQL', 'servers', $this->sServerName, 'db');
-            $bUseUtf8 = Settings::get('MYSQL', 'switchToUTF8');
 
             try
             {
-                //$driver_options = [PDO::MYSQL_ATTR_INIT_COMMAND => "SET names = 'utf-8', lc_time_names = 'ru_RU',time_zone = 'Europe/Moscow'"];
-                $driver_options = [PDO::ATTR_PERSISTENT => false];
+                //$driver_options = [PDO::MYSQL_ATTR_INIT_COMMAND => "SET names = 'utf-8', lc_time_names = 'ru_RU',
+                //time_zone = 'Europe/Moscow'"];
+
+                $driver_options = [PDO::ATTR_PERSISTENT => false, PDO::ATTR_EMULATE_PREPARES => false];
 
                 //not usage MYSQL_ATTR_INIT_COMMAND and SET character_set_results = 'utf8' and other.. This is not safe!
                 self::$dbh = new \PDO("mysql:host={$sServer};dbname={$sDefaultDb};charset=UTF8", $sUser, $sPassword,
                     $driver_options);
             }
-            catch(\PDOException $e) {
+            catch (\PDOException $e)
+            {
                 throw new Exception($e->getMessage(), $e->getCode());
             }
         }
@@ -89,18 +86,21 @@ class Query
         return self::$dbh;
     }
 
-    public function escape($data)
+    private function escape2($variable)
     {
-        //see http://stackoverflow.com/questions/134099/are-pdo-prepared-statements-sufficient-to-prevent-sql-injection
-        mysql_query('SET NAMES utf8');
-        return mysql_real_escape_string($data);
-        //Подключение к БД может снижать производительность
-        return self::getPdo()->quote($data);
+        //TODO: Check long and negative numbers
+
+        if(is_numeric($variable))
+            return (int)$variable;
+        else if(is_string($variable))
+            return $this->addNamedVariable($variable);
+        else
+            throw new Exception('Invalid variable');
     }
 
     public function calcFoundRows()
     {
-        $this->aOtherParams['foundRows'] = true;
+        $this->aBuilder['params']['foundRows'] = true;
 
         return $this;
     }
@@ -108,22 +108,23 @@ class Query
     public function select(/** @noinspection PhpUnusedParameterInspection */
         $sField1, $sField2 = null, $sFieldN = null)
     {
-        for($i = 0; $i < func_num_args(); $i++)
-            $this->aFields[] = func_get_arg($i);
+        for ($i = 0; $i < func_num_args(); $i++)
+            $this->aBuilder['fields'][] = func_get_arg($i);
 
         return $this;
     }
 
     public function distinct()
     {
-        $this->bDistinct = true;
+        $this->aBuilder['isDistinct'] = true;
 
         return $this;
     }
 
     /**
-     * @param $sTableName
+     * @param      $sTableName
      * @param null $sSuffix
+     *
      * @return $this
      * @throws \Brainfit\Model\Exception
      */
@@ -132,14 +133,8 @@ class Query
         if(strpos($sTableName, ' ') !== false)
             throw new Exception('Unacceptable gap in "from"');
 
-        $newTablesArray = [];
-        foreach(explode('.', $sTableName) as $t)
-            $newTablesArray[] = '`'.$t.'`';
-
-        $sTableName = implode('.', $newTablesArray);
-
-        $this->aTables[] = [
-            'name' => $sTableName,
+        $this->aBuilder['tables'][] = [
+            'name' => $this->escapeTableName($sTableName),
             'suffix' => $sSuffix
         ];
 
@@ -155,18 +150,18 @@ class Query
         if($params[1] == '%i')
             return $this->escapeInt($value);
         elseif($params[1] == '%s')
-            return $this->escapeString($value);
+            return $this->addNamedVariable($value);
         elseif($params[1] == '%a')
             return $this->createIN($value);
-        elseif($params[1] == '%w')
-            return $value;
+        /*elseif($params[1] == '%w')
+            return $value;*/
         else
-            return '?';
+            throw new Exception('Invalid variable in query-builder'); //return '?';
     }
 
     public function groupBy($sVariable)
     {
-        $this->aGroupBy[] = $sVariable;
+        $this->aBuilder['groupBy'][] = $sVariable;
 
         return $this;
     }
@@ -179,42 +174,16 @@ class Query
         $this->aLoadedValues = [];
         $this->iPointer = 0;
 
-        for($i = 1; $i < func_num_args(); $i++)
+        for ($i = 1; $i < func_num_args(); $i++)
             $this->aLoadedValues[] = func_get_arg($i);
 
         $sVariable = preg_replace_callback("/(%[siaw])/", [$this, 'variable_check2'], $sVariable);
 
-        $this->sWhere .= ($this->sWhere ? ' AND ' : '').'('.$sVariable.')';
+        $this->aBuilder['where'][] = '(' . $sVariable . ')';
 
         return $this;
     }
 
-    public function join($sDirection, $sTableName, $sSuffix, $sVariable, /** @noinspection PhpUnusedParameterInspection */
-                         $sValue1 = null, /** @noinspection PhpUnusedParameterInspection */
-                         $sValue2 = null, /** @noinspection PhpUnusedParameterInspection */
-                         $sValueN = null)
-    {
-        if(!in_array($sDirection, ['left', 'right', 'inner']))
-            throw new Exception('Invalid direction');
-
-        $newTablesArray = [];
-        foreach(explode('.', $sTableName) as $t)
-            $newTablesArray[] = '`'.$t.'`';
-
-        $sTableName = implode('.', $newTablesArray);
-
-        $this->aLoadedValues = [];
-        $this->iPointer = 0;
-
-        for($i = 3; $i < func_num_args(); $i++)
-            $this->aLoadedValues[] = func_get_arg($i);
-
-        $sVariable = preg_replace_callback("/(%[siaw])/", [$this, 'variable_check2'], $sVariable);
-
-        $this->sJoins .= ' '. $sDirection.' join '.$sTableName.' '.$sSuffix.' on '.$sVariable;
-
-        return $this;
-    }
 
     public function having($sVariable, /** @noinspection PhpUnusedParameterInspection */
                            $sValue1 = null, /** @noinspection PhpUnusedParameterInspection */
@@ -224,24 +193,63 @@ class Query
         $this->aLoadedValues = [];
         $this->iPointer = 0;
 
-        for($i = 1; $i < func_num_args(); $i++)
+        for ($i = 1; $i < func_num_args(); $i++)
             $this->aLoadedValues[] = func_get_arg($i);
 
         $sVariable = preg_replace_callback("/(%[siaw])/", [$this, 'variable_check2'], $sVariable);
 
-        $this->sHaving .= ($this->sHaving ? ' AND ' : '').'('.$sVariable.')';
+        $this->aBuilder['having'][] = '(' . $sVariable . ')';
 
         return $this;
+    }
+
+    public function join($sDirection, $sTableName, $sSuffix,
+                         $sVariable, /** @noinspection PhpUnusedParameterInspection */
+                         $sValue1 = null, /** @noinspection PhpUnusedParameterInspection */
+                         $sValue2 = null, /** @noinspection PhpUnusedParameterInspection */
+                         $sValueN = null)
+    {
+        if(!in_array($sDirection, ['left', 'right', 'inner']))
+            throw new Exception('Invalid direction');
+
+        $this->aLoadedValues = [];
+        $this->iPointer = 0;
+
+        for ($i = 3; $i < func_num_args(); $i++)
+            $this->aLoadedValues[] = func_get_arg($i);
+
+        $sVariable = preg_replace_callback("/(%[siaw])/", [$this, 'variable_check2'], $sVariable);
+
+        $this->aBuilder['joins'][] = $sDirection . ' join ' .
+            $this->escapeTableName($sTableName) . ' ' . $sSuffix . ' on ' . $sVariable;
+
+        return $this;
+    }
+
+    /**
+     * Convert "db.table1" to "`db`.`table1`
+     *
+     * @param $sTable
+     *
+     * @return string
+     */
+    private function escapeTableName($sTable)
+    {
+        $newTablesArray = [];
+        foreach (explode('.', $sTable) as $t)
+            $newTablesArray[] = '`' . $t . '`';
+
+        return implode('.', $newTablesArray);
     }
 
 
     private function escapeInt($value)
     {
-        if($value === NULL)
+        if($value === null)
             return 'NULL';
 
         if(!is_numeric($value))
-            throw new Exception("Integer (?i) placeholder expects numeric value, ".gettype($value)." given");
+            throw new Exception("Integer (?i) placeholder expects numeric value, " . gettype($value) . " given");
 
         if(is_float($value))
             return number_format($value, 0, '.', ''); // may lose precision on big numbers
@@ -258,31 +266,26 @@ class Query
             return 'NULL';
 
         $query = $comma = '';
-        foreach($data as $value)
+        foreach ($data as $value)
         {
-            $query .= $comma.$this->escapeString($value);
+            $query .= $comma . $this->addNamedVariable($value);
             $comma = ",";
         }
 
         return $query;
     }
 
-    private function escapeString($value)
+    private function addNamedVariable($value)
     {
-        //if($value === NULL)
-        //    return 'NULL';
+        $this->iExecuteValueCounter++;
+        $this->aExecuteValues[':strim' . $this->iExecuteValueCounter] = $value;
 
-
-        $this->iImId++;
-        $this->aExecuteValues[':strim'.$this->iImId] = $value;
-        return ':strim'.$this->iImId;
-
-        return "'".$this->escape($value)."'";
+        return ':strim' . $this->iExecuteValueCounter;
     }
 
     public function orderBy($sFieldName, $sOrder = 'ASC')
     {
-        $this->aOrderBy[] = $sFieldName.' '.$sOrder;
+        $this->aBuilder['orderBy'][] = $sFieldName . ' ' . $sOrder;
 
         return $this;
     }
@@ -290,176 +293,173 @@ class Query
     public function limit($iLimit = null, $iOffset = null)
     {
         if(!is_null($iOffset))
-            $this->aOtherParams['offset'] = (int)$iOffset;
+            $this->aBuilder['params']['offset'] = (int)$iOffset;
 
         if(!is_null($iLimit))
-            $this->aOtherParams['limit'] = (int)$iLimit;
+            $this->aBuilder['params']['limit'] = (int)$iLimit;
 
         return $this;
     }
 
     /**
      * @param $iTime int        When -1 — existing cache cleaning
+     *
      * @return $this
      */
     public function cache($iTime)
     {
-        $this->aOtherParams['cache'] = $iTime;
+        $this->aBuilder['params']['cache'] = $iTime;
 
         return $this;
     }
 
-    public function get($sType = 'matrix')
+
+    public function execute($sSqlStatement)
     {
-        $this->prepareSql('select');
-        $this->prepareResult();
+        $this->aBuilder['statements'][] = $sSqlStatement;
 
-        if($sType == 'first')
-            return $this->aResult[0];
-        elseif($sType == 'array')
-        {
-            $aRet = [];
-            foreach($this->aResult as $aItem)
-                $aRet[] = $aItem[array_keys($aItem)[0]];
-
-            return $aRet;
-        }
-        elseif($sType == 'assoc')
-        {
-            $aRet = [];
-            foreach($this->aResult as $aItem)
-                $aRet[array_values($aItem)[0]] = array_values($aItem)[1];
-
-            return $aRet;
-        }
-
-        return (array)$this->aResult;
-    }
-
-    /**
-     * @param callable $obLoader
-     * @return array
-     */
-    public function load(callable $obLoader, $sFieldNameForFactory = null)
-    {
-        $this->prepareSql('select');
-        $this->prepareResult();
-
-        $aRet = [];
-        foreach($this->aResult as $v)
-        {
-            if (!is_null($sFieldNameForFactory))
-                $aRet[] = $obLoader($v[$sFieldNameForFactory]);
-            else
-                $aRet[] = $obLoader($v);
-        }
-
-        return $aRet;
-    }
-
-    public function getFoundRows()
-    {
-        return $this->iCalcFoundRows;
+        return $this;
     }
 
     private function prepareSql($mainAction)
     {
-        //The resulting query
-        if ($mainAction == 'select')
-        {
-            $this->sResultSql = 'SELECT '.($this->bDistinct ? 'DISTINCT ' : '');
-
-            //Collect the required fields:
-            $this->sResultSql .= implode(', ', $this->aFields);
-        }
-        else if ($mainAction == 'delete')
-            $this->sResultSql = 'DELETE ';
+        $sResultSql = '';
 
         //Collect tables
-        $aResult = [];
-        foreach($this->aTables as $aTableItem)
-            $aResult[] = $aTableItem['name'].' '.$aTableItem['suffix'];
-        $this->sResultSql .= $aResult ? ' FROM '.implode(', ', $aResult) : '';
+        $aTablesList = [];
+        foreach ($this->aBuilder['tables'] as $aTableItem)
+            $aTablesList[] = $aTableItem['name'] . ' ' . $aTableItem['suffix'];
+
+
+        //The resulting query
+        if($this->aBuilder['statements'])
+            $sResultSql = implode(' ', $this->aBuilder['statements']);
+        else if($mainAction == 'insert')
+        {
+            $sResultSql = 'INSERT ' . ($this->aBuilder['isIgnoreInsert'] ? 'IGNORE ' : '') . 'INTO '
+                . implode(', ', $aTablesList);
+
+            $sResultSql .= '(' . implode(', ', array_keys($this->aBuilder['set'])) . ') VALUES ('
+                . implode(', ', array_values($this->aBuilder['set'])) . ')';
+
+            if($this->aBuilder['isUpdateInsert'])
+            {
+                $aSubBuilder = [];
+                foreach (array_keys($this->aBuilder['set']) as $sField)
+                    $aSubBuilder[] = "{$sField} = VALUES({$sField})";
+
+                $sResultSql .= $aSubBuilder ? ' ON DUPLICATE KEY UPDATE ' . implode(', ', $aSubBuilder) : '';
+            }
+        }
+        else if($mainAction == 'update')
+        {
+            $sResultSql = 'UPDATE ' . implode(', ', $aTablesList) . ' SET ';
+
+            $aSubBuilder = [];
+            foreach ($this->aBuilder['set'] as $sField => $sValue)
+                $aSubBuilder[] = "{$sField} = {$sValue}";
+
+            $sResultSql .= implode(', ', $aSubBuilder);
+        }
+        else if($mainAction == 'select')
+        {
+            $sResultSql = 'SELECT ' . ($this->aBuilder['isDistinct'] ? 'DISTINCT ' : '')
+                . implode(', ', $this->aBuilder['fields']);
+
+            $sResultSql .= ' FROM ' . implode(', ', $aTablesList);
+        }
+        else if($mainAction == 'delete')
+        {
+            $sResultSql = 'DELETE ';
+            $sResultSql .= ' FROM ' . implode(', ', $aTablesList);
+        }
+
 
         //collect join-expressions
-        $this->sResultSql .= $this->sJoins ? ' '.$this->sJoins.' ' : '';
+        if($this->aBuilder['joins'])
+            $sResultSql .= ' ' . implode(' ', $this->aBuilder['joins']);
 
         //collect where-expressions
-        $this->sResultSql .= $this->sWhere ? ' WHERE '.$this->sWhere : '';
+        if($this->aBuilder['where'])
+            $sResultSql .= ' WHERE ' . implode(' AND ', $this->aBuilder['where']);
 
         //collect having-expressions
-        $this->sResultSql .= $this->sHaving ? ' HAVING '.$this->sHaving : '';
+        if($this->aBuilder['having'])
+            $sResultSql .= ' HAVING ' . implode(' AND ', $this->aBuilder['having']);
 
         //collect group-by expressions
-        $this->sResultSql .= ($this->aGroupBy ? ' GROUP BY '.implode(', ', $this->aGroupBy) : '');
+        if($this->aBuilder['groupBy'])
+            $sResultSql .= ' GROUP BY ' . implode(', ', $this->aBuilder['groupBy']);
 
         //collect order-by expressions
-        $this->sResultSql .= ($this->aOrderBy ? ' ORDER BY '.implode(', ', $this->aOrderBy) : '');
+        if($this->aBuilder['orderBy'])
+            $sResultSql .= ' ORDER BY ' . implode(', ', $this->aBuilder['orderBy']);
 
-        if($this->aOtherParams['limit'] && $this->aOtherParams['offset'])
-            $this->sResultSql .= " LIMIT ".$this->aOtherParams['offset'].", ".$this->aOtherParams['limit'];
-        elseif($this->aOtherParams['limit'])
-            $this->sResultSql .= " LIMIT ".$this->aOtherParams['limit'];
+        if($this->aBuilder['params']['limit'] && $this->aBuilder['params']['offset'])
+            $sResultSql .= " LIMIT " . $this->aBuilder['params']['offset'] . ", " . $this->aBuilder['params']['limit'];
+        elseif($this->aBuilder['params']['limit'])
+            $sResultSql .= " LIMIT " . $this->aBuilder['params']['limit'];
+
+        return $sResultSql;
     }
 
-    private function prepareResult()
+    private function prepareResult($sSql)
     {
-        if (!$this->sResultSql)
+        if(!$sSql)
             throw new Exception('Invalid call sequence');
 
         //maybe from cache
-        $sCacheKey = sha1($this->sResultSql.implode(array_values($this->aExecuteValues)));
-        $iCache = (int)$this->aOtherParams['cache'];
-
+        $sCacheKey = sha1($sSql . implode(array_values($this->aExecuteValues)));
+        $iCache = (int)$this->aBuilder['params']['cache'];
         $obApc = Apc::getInstance();
 
-        if ($iCache > 0 && !$obApc->add($sCacheKey, 1, $iCache))
+        if($iCache > 0 && !$obApc->add($sCacheKey, 1, $iCache))
         {
-            $this->aResult = (array)$obApc->fetch($sCacheKey.'v');
-            $this->iCalcFoundRows = (int)$obApc->fetch($sCacheKey.'f');
+            $aResult = (array)$obApc->fetch($sCacheKey . 'v');
+            $this->iCalcFoundRows = (int)$obApc->fetch($sCacheKey . 'f');
 
-            $this->saveForProfiling($this->sResultSql, 'from cache');
+            $this->saveForProfiling($sSql, 'from cache');
 
             //debug:
-            if ($sDumpName = $this->aOtherParams['getDump'])
-                Debugger::clientLog('HIDDEN'.($sDumpName ? 'sql' : $sDumpName).' [cache]: '.$this->sResultSql,
-                    $this->aResult);
+            if($sDumpName = $this->aBuilder['params']['getDump'])
+                Debugger::clientLog('HIDDEN' . ($sDumpName ? 'sql' : $sDumpName) . ' [cache]: ' . $sSql,
+                    $aResult);
 
-            return;
+            return $aResult;
         }
 
-        if ($iCache == -1)
+        if($iCache == -1)
         {
-            $obApc->delete([$sCacheKey.'v', $sCacheKey.'f']);
-            $this->saveForProfiling($this->sResultSql, 'clean cache query');
+            $obApc->delete([$sCacheKey . 'v', $sCacheKey . 'f']);
+            $this->saveForProfiling($sSql, 'clean cache query');
         }
         else
-            $this->saveForProfiling($this->sResultSql, 'direct query');
+            $this->saveForProfiling($sSql, 'direct query');
 
         //Begin
-        $this->CreateQuery($this->sResultSql, !$this->aOtherParams['foundRows'], $this->aExecuteValues);
+        $this->CreateQuery($sSql, !$this->aBuilder['params']['foundRows'], $this->aExecuteValues);
 
-        $matrix = [];
+        $aResult = [];
 
         //field types
         $aFields = [];
-        for($i=0;$i<1000;$i++)
+        for ($i = 0; $i < 1000; $i++)
         {
-            if (!$aMetaInfo = $this->stmp->getColumnMeta($i))
+            if(!$aMetaInfo = $this->obStmp->getColumnMeta($i))
                 break;
 
             $aFields[$aMetaInfo['name']] = $aMetaInfo['native_type']; //pdo_type
         }
 
         $k = 0;
-        while($row = $this->stmp->fetch(PDO::FETCH_ASSOC))
+        while ($row = $this->obStmp->fetch(PDO::FETCH_ASSOC))
         {
-            $matrix[$k] = $row;
+            $aResult[$k] = $row;
 
             //Change some rows types:
-            foreach($aFields as $field=>$type)
+            foreach ($aFields as $field => $type)
             {
-                switch ( $type )
+                switch ($type)
                 {
                     // Convert INT to an integer.
                     case 'LONG':
@@ -467,19 +467,19 @@ class Query
                     case 'TINY':
                     case 'SHORT':
                     case 'INT24':
-                        $matrix[$k][$field] = intval($matrix[$k][$field]);
+                        $aResult[$k][$field] = intval($aResult[$k][$field]);
                         break;
                     // Convert FLOAT to a float.
                     case 'FLOAT':
                     case 'NEWDECIMAL':
                     case 'DOUBLE':
-                        $matrix[$k][$field] = floatval($matrix[$k][$field]);
+                        $aResult[$k][$field] = floatval($aResult[$k][$field]);
                         break;
                     case 'TIMESTAMP':
                     case 'DATE':
                     case 'DATETIME':
-                        /*$obTemp = new \DateTime($matrix[$k][$field->name]);
-                        $matrix[$k][$field->name] = $obTemp->getTimestamp();*/
+                        /*$obTemp = new \DateTime($aResult[$k][$field->name]);
+                        $aResult[$k][$field->name] = $obTemp->getTimestamp();*/
                         break;
                     case 'VAR_STRING':
                     case 'STRING':
@@ -494,21 +494,16 @@ class Query
             $k++;
         }
 
-        $this->iCalcFoundRows = (int)$this->_foundRows;
+        if($sDumpName = $this->aBuilder['params']['getDump'])
+            Debugger::clientLog('HIDDEN' . ($sDumpName ? 'sql' : $sDumpName) . ': [query]: ' . $sSql, $aResult);
 
-        $this->free();
-
-        $this->aResult = (array)$matrix;
-
-        if ($sDumpName = $this->aOtherParams['getDump'])
-            Debugger::clientLog('HIDDEN'.($sDumpName ? 'sql' : $sDumpName).': [query]: '.$this->sResultSql,
-                $this->aResult);
-
-        if ($iCache)
+        if($iCache)
         {
-            $obApc->store($sCacheKey.'v', $this->aResult, $iCache*2);
-            $obApc->store($sCacheKey.'f', $this->iCalcFoundRows, $iCache*2);
+            $obApc->store($sCacheKey . 'v', $aResult, $iCache * 2);
+            $obApc->store($sCacheKey . 'f', $this->iCalcFoundRows, $iCache * 2);
         }
+
+        return $aResult;
     }
 
     private function saveForProfiling($sSql, $sGroupName)
@@ -518,23 +513,9 @@ class Query
 
     public function dump($sDescription = 'query')
     {
-        $this->aOtherParams['getDump'] = $sDescription;
+        $this->aBuilder['params']['getDump'] = $sDescription;
 
         return $this;
-    }
-
-
-
-
-    //////////////////////////////////////////
-    public function run($strSQL)
-    {
-        $this->CreateQuery($strSQL, true);
-
-        $result1 = $this->stmp->rowCount();
-        $this->free();
-
-        return $result1;
     }
 
     private function CreateQuery($strSQLQuery, $foundRowsDisable = false, $params = null)
@@ -558,185 +539,152 @@ class Query
 
         try
         {
-            if (!$stmt = self::getPdo()->prepare($strSQLQuery))
+            if(!$stmt = self::getPdo()->prepare($strSQLQuery))
                 throw new Exception('Problem when prepare query');
 
             $stmt->execute($params);
-            $this->stmp = $stmt;
+            $this->obStmp = $stmt;
 
             if($calc_found_rows_enable)
             {
                 $sql = "select found_rows();";
-                if (!$stmt2 = self::getPdo()->query($sql))
+                if(!$stmt2 = self::getPdo()->query($sql))
                     throw new Exception('Problem when prepare "found_rows" query');
-                $this->_foundRows = (int)$stmt2->fetch(PDO::FETCH_COLUMN);
+                $this->iCalcFoundRows = (int)$stmt2->fetch(PDO::FETCH_COLUMN);
                 $stmt2->closeCursor();
             }
-        }catch(\PDOException $e) {
-            Debugger::log('Mysql error:', self::getPdo()->error, 'Query:', $strSQLQuery);
-            throw new Exception('Mysql error #'.$e->getCode(), 1);
+        }
+        catch (\PDOException $e)
+        {
+            Debugger::log('Mysql error:', $e->getMessage(), 'Query:', $strSQLQuery);
+            throw new Exception('Mysql error #' . $e->getCode(), 1);
         }
 
         return 1;
     }
 
-    public function lookup($ColumnName, $TableName, $CriteriaColumn, $CriteriaCondition, $cache_time = 0)
-    {
-        return $this
-                   ->select($ColumnName)
-                   ->from($TableName)
-                   ->where("`{$CriteriaColumn}` = %s", $CriteriaCondition)
-                   ->cache($cache_time)
-                   ->limit(1)
-                   ->get('first')[$ColumnName];
-    }
-
-    public function free()
-    {
-        if($this->stmp)
-            $this->stmp->closeCursor();
-
-        $this->_foundRows = 0;
-    }
-
     public function delete()
     {
-        $this->prepareSql('delete');
+        $sSql = $this->prepareSql('delete');
 
-        $this->CreateQuery($this->sResultSql, true, $this->aExecuteValues);
-        $this->free();
+        $this->CreateQuery($sSql, true, $this->aExecuteValues);
     }
 
-    public function insert($table, $fields, $getInsertId = false, $update = false, $ignore = false)
+    public function set($field, $value = null)
     {
-        $tablesArray = explode('.', $table);
-
-        $newTablesArray = array();
-        foreach($tablesArray as $t)
+        if(is_array($field))
         {
-            $newTablesArray[] = "`{$t}`";
+            //multi-set
+            foreach ($field as $k => $v)
+                $this->set($k, $v);
+
+            return $this;
         }
-        $table = implode('.', $newTablesArray);
 
-        try
+        $this->aBuilder['set']['`' . $field . '`'] = $this->escape2($value);
+
+        return $this;
+    }
+
+    /**
+     * After insert you must use "getLastInsertId()" or "getRowCount()" method
+     *
+     * @param      $table
+     * @param bool $update
+     * @param bool $ignore
+     *
+     * @throws \Brainfit\Model\Exception
+     */
+    public function insert($table, $update = false, $ignore = false)
+    {
+        if(!$this->aBuilder['set'])
+            throw new Exception('Builder: not found "set" fields');
+
+        $this->aBuilder['isIgnoreInsert'] = (bool)$ignore;
+        $this->aBuilder['isUpdateInsert'] = (bool)$update;
+        $this->aBuilder['tables'] = [['name' => $this->escapeTableName($table)]];
+
+        $sSql = $this->prepareSql('insert');
+        $this->prepareResult($sSql);
+
+    }
+
+    public function update($table)
+    {
+        if(!$this->aBuilder['set'])
+            throw new Exception('Builder: not found "set" fields');
+
+        if(!$this->aBuilder['where'])
+            throw new Exception('Builder: not found "where" fields');
+
+        $this->aBuilder['tables'] = [['name' => $this->escapeTableName($table)]];
+
+        $sSql = $this->prepareSql('update');
+        $this->prepareResult($sSql);
+    }
+
+    public function get($sType = 'matrix')
+    {
+        $sSql = $this->prepareSql('select');
+        $aResult = $this->prepareResult($sSql);
+
+        if($sType == 'first')
+            return $aResult[0];
+        elseif($sType == 'array')
         {
-            $updateFields = array();
-            $updateValues = array();
-            $updateAsSqlFields = array();
+            $aRet = [];
+            foreach ($aResult as $aItem)
+                $aRet[] = $aItem[array_keys($aItem)[0]];
 
-            foreach($fields as $name => $value)
-            {
-                $commitAsSql = false; //Сохранять как sql-код поля, которые начинаются с >
+            return $aRet;
+        }
+        elseif($sType == 'assoc')
+        {
+            $aRet = [];
+            foreach ($aResult as $aItem)
+                $aRet[array_values($aItem)[0]] = array_values($aItem)[1];
 
+            return $aRet;
+        }
 
-                if($name && mb_substr($name, 0, 1) == '>')
-                {
-                    $name = mb_substr($name, 1);
-                    $commitAsSql = true;
-                }
+        return (array)$aResult;
+    }
 
-                if($name && mb_substr($name, 0, 1) == '>')
-                {
-                    $name = mb_substr($name, 1);
-                    $updateAsSqlFields[] = "`{$name}`=".$value;
-                }
-                else
-                {
-                    $updateFields[] = "`{$name}`";
-                    $updateValues[] = $commitAsSql ? $value : "'".$this->escape($value)."'";
-                }
-            }
+    /**
+     * @param callable $obLoader
+     * @param null     $sFieldNameForFactory
+     *
+     * @return array
+     */
+    public function load(callable $obLoader, $sFieldNameForFactory = null)
+    {
+        $sSql = $this->prepareSql('select');
+        $aResult = $this->prepareResult($sSql);
 
-            $added_update_sql = "";
-
-            if($update)
-            {
-                $added_update_sql = " ON DUPLICATE KEY UPDATE ";
-
-                $f2 = 0;
-                foreach($updateFields as $f1)
-                {
-                    if($f2)
-                        $added_update_sql .= ",";
-                    $added_update_sql .= "{$f1} = VALUES({$f1})";
-                    $f2++;
-                }
-                foreach($updateAsSqlFields as $f1)
-                {
-                    if($f2)
-                        $added_update_sql .= ",";
-                    $added_update_sql .= $f1;
-                    $f2++;
-                }
-            }
-
-            $this->CreateQuery(
-                "INSERT ".($ignore ? "IGNORE " : "")."INTO {$table} (".
-                join(',', $updateFields).
-                ") VALUES (".
-                join(',', $updateValues).
-                "){$added_update_sql};",
-                true,
-                $this->aExecuteValues
-            );
-
-
-            if($getInsertId)// && !$update)
-            { //При update даже если произошел первичный insert вернется affected_rows!
-                $ret = self::getPdo()->lastInsertId();
-                $this->free();
-
-                return $ret;
-            }
+        $aRet = [];
+        foreach ($aResult as $v)
+        {
+            if(!is_null($sFieldNameForFactory))
+                $aRet[] = $obLoader($v[$sFieldNameForFactory]);
             else
-            {
-                $result1 = $this->stmp->rowCount();
-                $this->free();
-
-                return $result1;
-            }
-
-        } catch(Exception $e)
-        {
-            $err = $e;
-            Debugger::log("SQL Error: $err");
+                $aRet[] = $obLoader($v);
         }
 
-        return false;
+        return $aRet;
     }
 
-    public function update($table, $field, $criteriaField, $criteria, $value)
+    public function getFoundRows()
     {
-        $tablesArray = mb_split('\.', $table);
+        return $this->iCalcFoundRows;
+    }
 
-        $newTablesArray = array();
-        foreach($tablesArray as $t)
-        {
-            $newTablesArray[] = "`{$t}`";
-        }
-        $table = join('.', $newTablesArray);
+    public function getLastInsertId()
+    {
+        return self::getPdo()->lastInsertId();
+    }
 
-        $err = '';
-        try
-        {
-            $this->CreateQuery(
-                "UPDATE {$table}
-                    SET `{$field}` = '".$this->escape($value)."'
-                    WHERE `{$criteriaField}` = '{$criteria}'",
-                true
-            );
-        } catch(Exception $e)
-        {
-            $err = $e;
-            Debugger::log("SQL Error: $err");
-        }
-
-        $result1 = $this->stmp->rowCount();
-        $this->free();
-
-        if(!$err)
-            return $result1;
-
-        return false;
+    public function getRowCount()
+    {
+        return $this->obStmp->rowCount();
     }
 }
