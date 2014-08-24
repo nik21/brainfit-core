@@ -91,7 +91,7 @@ class Query
         //TODO: Check long and negative numbers
 
         if(is_numeric($variable))
-            return (int)$variable;
+            return $this->escapeInt($variable);
         else if(is_string($variable))
             return $this->addNamedVariable($variable);
         else
@@ -572,17 +572,16 @@ class Query
 
     public function set($field, $value = null)
     {
-        if(is_array($field))
+        if (is_array($field))
         {
             //multi-set
-            foreach ($field as $k => $v)
+            foreach($field as $k=>$v)
                 $this->set($k, $v);
 
             return $this;
         }
 
         $this->aBuilder['set']['`' . $field . '`'] = $this->escape2($value);
-
         return $this;
     }
 
