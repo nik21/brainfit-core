@@ -4,31 +4,18 @@ namespace Brainfit\Io\Output;
 use Brainfit\Io\Output\SmartyPlugins\SmartyMainPlugins;
 use Brainfit\Util\Reflection\Singleton;
 
-class OutputSmarty implements OutputInterface
+class OutputSmarty extends OutputJson implements OutputInterface
 {
     use Singleton;
 
     private $smarty;
-    private $displayTemplate;
-    private $template;
-
-    private $cache;
 
     public function __construct()
     {
         $this->smarty = new \Smarty();
-        $this->addPlugin(new SmartyMainPlugins());
-
-        $this->smarty->setCacheDir(ROOT.'/cache/smarty/cache/');
-        $this->smarty->setCompileDir(ROOT.'/cache/smarty/compile/');
-        $this->smarty->setTemplateDir(ROOT.'templates/');
-
-        $this->smarty->error_reporting = error_reporting();
-        //$this->smarty->loadPlugin('smarty_modifier_escape');
-        $this->smarty->registerFilter('variable', [$this, 'htmlEscapeReplacer']);
     }
 
-    public function htmlEscapeReplacer($e)
+    public function htmlEscapeReplacement($e)
     {
         return htmlspecialchars($e, ENT_NOQUOTES | ENT_HTML5);
     }
@@ -46,62 +33,64 @@ class OutputSmarty implements OutputInterface
         }
     }
 
-    public function assign($name, $value = null)
+    private function replaceObjects($v)
     {
-        if($name == 'displayTemplate')
-            $this->displayTemplate = $value;
-        elseif($name == 'template')
-            $this->template = $value;
-        elseif($name == 'cache')
-            $this->cache = (int)$value;
-        else
-            $this->smarty->assign($name, $value);
-    }
-
-    public function getVar($name)
-    {
-        if($name == 'displayTemplate')
-            return $this->displayTemplate;
-        elseif($name == 'template')
-            return $this->template;
-        else
-            return $this->smarty->getTemplateVars($name);
-    }
-
-    /*
-     * Корректировака имен шаблонов перед выводом
-     */
-    private function corrector()
-    {
-        if($this->template)
+        if (is_object($v) && method_exists($v, 'get'))
+            return $v->get(); //Тут не следует проверять обещания, а то они пойдут по-одному
+        else if (is_array($v))
         {
-            $this->template = str_replace('_', '/', $this->template).'.tpl';
-            $this->smarty->assign('template', $this->template);
+            foreach($v as &$v1)
+                $v1 = $this->replaceObjects($v1);
         }
 
+        return $v;
+    }
 
-        if($this->displayTemplate && substr($this->displayTemplate, 0, 7) != 'string:'
-            && substr($this->displayTemplate, 0, 5) != 'eval:'
-        )
-            $this->displayTemplate = str_replace('_', '/', $this->displayTemplate).'.tpl';
+    private function prepare()
+    {
+        //Init smarty options
+        $this->addPlugin(new SmartyMainPlugins());
+
+        $this->smarty->setCacheDir(ROOT.'/cache/smarty/cache/');
+        $this->smarty->setCompileDir(ROOT.'/cache/smarty/compile/');
+        $this->smarty->setTemplateDir(ROOT.'templates/');
+
+        $this->smarty->error_reporting = error_reporting();
+        $this->smarty->registerFilter('variable', [$this, 'htmlEscapeReplacement']);
+
+        //recursive call "get" for all objects. Execute deferred methods
+        $this->result = $this->replaceObjects($this->result);
+        $this->result = $this->replaceObjects($this->result); //For deferred in deferred output
+
+        //templates
+        if($this->result['template'])
+            $this->result['template'] = str_replace('_', '/', $this->result['template']).'.tpl';
+
+        if ($this->result['displayTemplate'] && substr($this->result['displayTemplate'], 0, 7) != 'string:'
+            && substr($this->result['displayTemplate'], 0, 5) != 'eval:')
+            $this->result['displayTemplate'] =  str_replace('_', '/', $this->result['displayTemplate']).'.tpl';
+
+        if ($this->result['cache'])
+            $this->smarty->cache_lifetime = (int)$this->result['cache'];
+
+        //assign all:
+        $this->smarty->assign($this->result);
     }
 
     public function get()
     {
-        $this->corrector();
+        $this->prepare();
 
-        $this->smarty->cache_lifetime = (int)$this->cache;
-
-        if($this->displayTemplate)
-            $this->smarty->display($this->displayTemplate);
-        elseif(!$this->displayTemplate && $this->template)
-            $this->smarty->display($this->template);
+        if($this->result['displayTemplate'])
+            $this->smarty->display($this->result['displayTemplate']);
+        elseif(!$this->result['displayTemplate'] && $this->result['template'])
+            $this->smarty->display($this->result['template']);
     }
 
     public function fetch()
     {
-        $this->corrector();
+        $this->prepare();
 
-        return $this->smarty->fetch($this->displayTemplate);
+        return $this->smarty->fetch($this->result['displayTemplate']);
     }
 }

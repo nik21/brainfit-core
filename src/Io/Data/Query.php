@@ -641,7 +641,7 @@ class Query
         {
             $aRet = [];
             foreach ($aResult as $aItem)
-                $aRet[array_values($aItem)[0]] = array_values($aItem)[1];
+                $aRet[array_values($aItem)[0]] = count($aItem) == 2 ? array_values($aItem)[1] : $aItem;
 
             return $aRet;
         }
