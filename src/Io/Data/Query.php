@@ -540,7 +540,10 @@ class Query
         try
         {
             if(!$stmt = self::getPdo()->prepare($strSQLQuery))
-                throw new Exception('Problem when prepare query');
+            {
+                Debugger::log('Query syntax problem:'.$strSQLQuery);
+                throw new Exception('Query syntax problem');
+            }
 
             $stmt->execute($params);
             $this->obStmp = $stmt;
