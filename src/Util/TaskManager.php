@@ -122,7 +122,7 @@ class TaskManager
         $obOutput = MethodWrapper::execute($sMethod, $obInput);
 
         if (self::$bDebug)
-            fwrite(STDERR, $obOutput->get()."\n");
+            echo($obOutput->get()."\n");
     }
 
     private static function parseTaskHeader($sData)
@@ -338,7 +338,7 @@ class TaskManager
             $message .= func_get_arg($i)." ";
 
         if (self::$bDebug)
-            fwrite(STDERR, trim($message)."\n");
+            echo(trim($message)."\n");
 
         return true;
     }
