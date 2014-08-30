@@ -331,10 +331,7 @@ class Query
             $aTablesList[] = $aTableItem['name'] . ' ' . $aTableItem['suffix'];
 
 
-        //The resulting query
-        if($this->aBuilder['statements'])
-            $sResultSql = implode(' ', $this->aBuilder['statements']);
-        else if($mainAction == 'insert')
+        if($mainAction == 'insert')
         {
             $sResultSql = 'INSERT ' . ($this->aBuilder['isIgnoreInsert'] ? 'IGNORE ' : '') . 'INTO '
                 . implode(', ', $aTablesList);
@@ -363,10 +360,14 @@ class Query
         }
         else if($mainAction == 'select')
         {
-            $sResultSql = 'SELECT ' . ($this->aBuilder['isDistinct'] ? 'DISTINCT ' : '')
-                . implode(', ', $this->aBuilder['fields']);
+            if($this->aBuilder['statements'])
+                $sResultSql = implode(' ', $this->aBuilder['statements']);
+            else
+                $sResultSql = 'SELECT ' . ($this->aBuilder['isDistinct'] ? 'DISTINCT ' : '')
+                    . implode(', ', $this->aBuilder['fields']);
 
-            $sResultSql .= ' FROM ' . implode(', ', $aTablesList);
+            if ($aTablesList)
+                $sResultSql .= ' FROM ' . implode(', ', $aTablesList);
         }
         else if($mainAction == 'delete')
         {
