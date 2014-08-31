@@ -11,14 +11,17 @@
     "version": "1.2.1",
     "require": {
         "php":">=5.4.0",
-        "ext-memcached": "*",
         "ext-pdo": "*",
         "ext-apcu": "*",
-        "ext-redis": "*",
-        "elasticsearch/elasticsearch": "~1.0",
-        "smarty/smarty": "dev-master",
-        "fabpot/yaml": "1.0.6",
-        "react/react": "0.4.*"
+        "symfony/yaml": "2.5.3"
+    },
+
+    "suggest": {
+        "ext-memcached": "Memcached class",
+        "ext-redis": "For use Storage class",
+        "elasticsearch/elasticsearch": "Provide simple class",
+        "react/react": "For running daemon processes",
+        "smarty/smarty": "If your use Smarty as output interface"
     },
 
     "autoload": {
@@ -27,32 +30,15 @@
         }
     },
 
-    "config":{
-        "process-timeout":2400
-    },
-
     "repositories":[
         {
             "type": "git",
             "url": "https://github.com/pilat/smarty"
-        },
-        {
-            "type": "package",
-            "package": {
-                "name": "fabpot/yaml",
-                "version": "1.0.6",
-                "autoload": {
-                    "psr-0": {
-                        "sfYaml": "lib/"
-                    }
-                },
-                "dist": {
-                    "type": "zip",
-                    "url": "https://github.com/fabpot/yaml/zipball/8a266aadce"
-                }
-            }
         }
     ],
 
-    "target-dir": "../"
+    "bin": [
+        "bin/daemon",
+        "bin/brainfit"
+    ]
 }

@@ -29,7 +29,7 @@ class Query
 
     //query builder:
     private $aBuilder = [];
-    private $aExecuteValues = null;
+    private $aExecuteValues = [];
     private $iExecuteValueCounter = 0; //params id's counter
 
     //result:
@@ -519,7 +519,7 @@ class Query
         return $this;
     }
 
-    private function CreateQuery($strSQLQuery, $foundRowsDisable = false, $params = null)
+    private function CreateQuery($strSQLQuery, $foundRowsDisable = false, $params = [])
     {
         if(!$strSQLQuery)
             return 0;

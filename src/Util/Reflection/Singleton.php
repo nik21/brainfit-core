@@ -3,7 +3,7 @@ namespace Brainfit\Util\Reflection;
 
 trait Singleton
 {
-    static protected $oInstance = null;
+    static private $oInstance = null;
 
     /**
      * @return $this

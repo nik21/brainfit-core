@@ -4,6 +4,9 @@ namespace Brainfit\Io\Data;
 
 use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Model\Exception;
+use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Parser;
+use Symfony\Component\Yaml\Yaml;
 
 class Config
 {
@@ -42,11 +45,17 @@ class Config
     private static function getConfig($aFiles)
     {
         $ret = [];
-        $parser = new \sfYamlParser();
 
         foreach($aFiles as $sFile)
         {
-            $aContent = $parser->parse(file_get_contents($sFile));
+            try
+            {
+                $aContent = Yaml::parse(file_get_contents($sFile));
+            }
+            catch(ParseException $e)
+            {
+                throw new Exception('Yaml parser error: '.$e->getMessage(), $e->getCode());
+            }
             foreach($aContent as $k=>$v)
                 $ret[$k] = $v;
         }

@@ -9,11 +9,6 @@ class Memcached
 {
     use Singleton;
 
-    static protected $oInstance;
-    /**
-     * @var Memcached
-     */
-
     private $bDisabled = false;
 
     private $obMemcached;

@@ -76,11 +76,11 @@ class Elasticsearch
         if ($this->obElasticSearch === false)
             return;
 
-        if (self::DEBUG && $this->aCommandQueue['upsert'])
+        if (self::DEBUG && isset($this->aCommandQueue['upsert']))
             Debugger::log('Elastic upsert', print_r($this->aCommandQueue['upsert'], true));
 
         //Update or insert
-        foreach ($this->aCommandQueue['upsert'] as $index => $data1) {
+        foreach ((array)$this->aCommandQueue['upsert'] as $index => $data1) {
             foreach ($data1 as $type => $data2) {
                 $params = [];
                 foreach ($data2 as $id => $data3) {
@@ -106,11 +106,11 @@ class Elasticsearch
             }
         }
 
-        if (self::DEBUG && $this->aCommandQueue['delete'])
+        if (self::DEBUG && isset($this->aCommandQueue['delete']))
             Debugger::log('Elastic delete', print_r($this->aCommandQueue['delete'], true));
 
         //Delete
-        foreach ($this->aCommandQueue['delete'] as $index => $data1) {
+        foreach ((array)$this->aCommandQueue['delete'] as $index => $data1) {
             foreach ($data1 as $type => $aIds) {
                 foreach ($aIds as $id) {
                     $ret = $this->obElasticSearch->delete([

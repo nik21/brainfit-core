@@ -2,7 +2,6 @@
 namespace Brainfit\Util;
 
 use Brainfit\Api\MethodWrapper;
-use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Io\Input\InputFake;
 use Brainfit\Model\Exception;
 use Brainfit\Service\ServiceFactory;
@@ -73,7 +72,6 @@ class TaskManager
             }
             else
             {
-                $this->shortTest();
                 $this->executeServiceMethods();
 
                 //Start listener
@@ -184,28 +182,19 @@ class TaskManager
         return fread(STDIN, $iBlockSize);
     }
 
-    private function shortTest()
-    {
-        $sProblem = '';
-
-        $obApc = Apc::getInstance();
-        $aData = $obApc->getCacheInfo();
-
-        if(!$aData['stime'])
-            $sProblem = "Need add \"apc.enable_cli\" option\n";
-
-        if(!$sProblem)
-            return;
-
-        throw new Exception($sProblem);
-    }
-
     /**
      * Scan "Service" folder and execute all methods as new process
      */
     private function executeServiceMethods()
     {
-        $aFiles = scandir(ROOT.'/engine/Service/');
+        $sServicesDir = ROOT.'/engine/Service/';
+
+        if (!file_exists($sServicesDir))
+            return false;
+
+        if (!$aFiles = scandir($sServicesDir))
+            return false;
+
         foreach($aFiles as $sFile)
         {
             if($sFile == '.' || $sFile == '..')
@@ -367,7 +356,7 @@ class TaskManager
     private function createProcess($sData, $sTaskId, $iType = 1)
     {
         //Now create the process and pass it on STDIN data
-        $process = new \React\ChildProcess\Process('php daemon.php -c '.$iType.' -h '.$this->sHost.' -p '.$this->iPort,
+        $process = new \React\ChildProcess\Process('./bin/daemon -c '.$iType.' -h '.$this->sHost.' -p '.$this->iPort,
             $this->sCwd);
 
         $sPid = 'Unknown';
