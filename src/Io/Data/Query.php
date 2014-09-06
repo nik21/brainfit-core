@@ -94,6 +94,8 @@ class Query
             return $this->escapeInt($variable);
         else if(is_string($variable))
             return $this->addNamedVariable($variable);
+        else if (is_bool($variable))
+            return $variable ? 1 : 0;
         else
             throw new Exception('Invalid variable');
     }
