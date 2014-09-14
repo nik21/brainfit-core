@@ -325,6 +325,9 @@ class Query
 
     private function prepareSql($mainAction)
     {
+        if ($this->aBuilder['director'])
+            throw new Exception('you use director mode');
+
         $sResultSql = '';
 
         //Collect tables
@@ -567,6 +570,12 @@ class Query
         }
 
         return 1;
+    }
+
+    public function director()
+    {
+        $this->aBuilder['director'] = true;
+        return $this->getPdo();
     }
 
     public function delete()
