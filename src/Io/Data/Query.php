@@ -18,7 +18,7 @@ class Query
     public static $profilingInfo = [];
 
     /** @var  \PDO */
-    private static $dbh = null;
+    private static $dbh = [];
 
     /** @var  \PDOStatement */
     private $obStmp;
@@ -57,7 +57,7 @@ class Query
      */
     private function getPdo()
     {
-        if(is_null(self::$dbh))
+        if(!isset(self::$dbh[$this->sServerName]))
         {
             if(!$sServer = Settings::get('MYSQL', 'servers', $this->sServerName, 'server'))
                 throw new Exception('Mysql server with id ' . $this->sServerName . ' not found in config file');
@@ -74,7 +74,7 @@ class Query
                 $driver_options = [PDO::ATTR_PERSISTENT => false, PDO::ATTR_EMULATE_PREPARES => false];
 
                 //not usage MYSQL_ATTR_INIT_COMMAND and SET character_set_results = 'utf8' and other.. This is not safe!
-                self::$dbh = new \PDO("mysql:host={$sServer};dbname={$sDefaultDb};charset=UTF8", $sUser, $sPassword,
+                self::$dbh[$this->sServerName] = new \PDO("mysql:host={$sServer};dbname={$sDefaultDb};charset=UTF8", $sUser, $sPassword,
                     $driver_options);
             }
             catch (\PDOException $e)
@@ -83,7 +83,7 @@ class Query
             }
         }
 
-        return self::$dbh;
+        return self::$dbh[$this->sServerName];
     }
 
     private function escape2($variable)
