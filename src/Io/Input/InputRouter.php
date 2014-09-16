@@ -26,21 +26,32 @@ class InputRouter extends InputPost implements InputInterface
             if(!$aRedirectExclusionList)
                 $aRedirectExclusionList = ['.jpg', '.png', '.gif', '.html', '.htm', '.txt', '.php', '.pl', '.asp'];
 
-            $sLastSymbol = mb_substr($url, -1, 1);
-            if($sLastSymbol != '/'
-                && !in_array(mb_convert_case(mb_substr($url, -4), MB_CASE_LOWER), $aRedirectExclusionList)
-            )
+            $sLastSymbol = mb_substr($url,-1,1);
+
+            if($sLastSymbol != '/')
             {
-                $url = $url . '/';
                 $bNeedRedirect = true;
+                foreach($aRedirectExclusionList as $sItem)
+                {
+                    if(mb_convert_case(mb_substr($url, -mb_strlen($sItem), mb_strlen($sItem)), MB_CASE_LOWER)
+                        == mb_convert_case($sItem, MB_CASE_LOWER)
+                    )
+                    {
+                        $bNeedRedirect = false;
+                        break;
+                    }
+                }
+
+                if ($bNeedRedirect)
+                    $url = $url . '/';
             }
-            elseif($sLastSymbol == '/'
-                && in_array(mb_convert_case(mb_substr($url, -5, 4), MB_CASE_LOWER), $aRedirectExclusionList)
-            )
-            {
-                $url = mb_substr($url, 0, mb_strlen($url) - 1);
-                $bNeedRedirect = true;
-            }
+            //            elseif($sLastSymbol == '/'
+            //                && in_array(mb_convert_case(mb_substr($url, -5, 4), MB_CASE_LOWER), $aRedirectExclusionList)
+            //            )
+            //            {
+            //                $url = mb_substr($url, 0, mb_strlen($url) - 1);
+            //                $bNeedRedirect = true;
+            //            }
         }
 
         //If the address has 2 slash, make a redirect on one
