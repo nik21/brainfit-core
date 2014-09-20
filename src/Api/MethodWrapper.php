@@ -8,20 +8,22 @@ use Brainfit\Model\Exception;
 class MethodWrapper
 {
     /**
+     * @param $sNamespace
      * @param $sMethodName
      * @param InputInterface $obInput
-     * @throws \Brainfit\Model\Exception
+     *
+     * @throws Exception
      * @return bool|OutputJson
      */
-    public static function execute($sMethodName, InputInterface $obInput)
+    public static function execute($sNamespace, $sMethodName, InputInterface $obInput)
     {
         $obOutput = new OutputJson();
 
-        $obMethod = MethodFactory::get($sMethodName);
+        $obMethod = MethodFactory::get($sNamespace, $sMethodName);
         if(!$obMethod)
             throw new Exception('Method not found: '.$sMethodName);
 
-        $obSecurity = SecurityFactory::get($obMethod->getSecurityMethod());
+        $obSecurity = SecurityFactory::get($sNamespace, $obMethod->getSecurityMethod());
         if(!$obSecurity)
             throw new Exception('Security type not found');
 

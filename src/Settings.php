@@ -2,12 +2,27 @@
 
 namespace Brainfit;
 
-use Brainfit\Io\Data\Config;
 use Brainfit\Model\Exception;
+use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Yaml\Yaml;
 
 class Settings
 {
     private static $aConfigurationFiles = null;
+
+    /**
+     * @var \Doctrine\Common\Cache\Cache
+     */
+    private static $cache = null;
+    private static $iTTL = 0;
+    private static $sVersion = '';
+
+    public static function useDoctrineCache(\Doctrine\Common\Cache\Cache $obCache, $iTTL = 0, $sVersion = '')
+    {
+        self::$cache = $obCache;
+        self::$iTTL = $iTTL;
+        self::$sVersion = $sVersion;
+    }
 
     public static function loadConfiguration($aConfigurationFiles)
     {
@@ -22,7 +37,23 @@ class Settings
         if (is_null(self::$aConfigurationFiles))
             throw new Exception('Configuration not loaded');
 
-        $ret = Config::get(self::$aConfigurationFiles);
+        //when file changes, your fetch old values
+        if (!is_null(self::$cache))
+        {
+            $sFilenameMd5 = self::$sVersion;
+            foreach(self::$aConfigurationFiles as $sFilename)
+                $sFilenameMd5 .= md5($sFilename);
+
+            $ret = self::$cache->fetch($sFilenameMd5);
+        }
+
+        if (is_null(self::$cache) || !$ret)
+        {
+            $ret = self::getConfig(self::$aConfigurationFiles);
+
+            if (!is_null(self::$cache))
+                self::$cache->save($sFilenameMd5, $ret, self::$iTTL);
+        }
 
         //TODO: should be optimized
         $iNumArgs = func_num_args();
@@ -35,6 +66,27 @@ class Settings
                 return null;
 
             $ret = &$ret[$sPath];
+        }
+
+        return $ret;
+    }
+
+    private static function getConfig($aFiles)
+    {
+        $ret = [];
+
+        foreach($aFiles as $sFile)
+        {
+            try
+            {
+                $aContent = Yaml::parse(file_get_contents($sFile));
+            }
+            catch(ParseException $e)
+            {
+                throw new Exception('Yaml parser error: '.$e->getMessage(), $e->getCode());
+            }
+            foreach($aContent as $k=>$v)
+                $ret[$k] = $v;
         }
 
         return $ret;

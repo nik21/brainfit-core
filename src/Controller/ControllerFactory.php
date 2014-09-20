@@ -7,15 +7,16 @@ use Exception;
 class ControllerFactory
 {
     /**
+     * @param $sNamespace
      * @param $className
      *
      * @throws Exception
      * @internal param string $methodName
      * @return ControllerInterface
      */
-    public static function create($className)
+    public static function create($sNamespace, $className)
     {
-        $sClassName = '\\Controller\\'.$className;
+        $sClassName = $sNamespace.'\\Controller\\'.$className;
 
         if(!class_exists($sClassName))
             throw new Exception('Class not found: '.$sClassName);

@@ -4,12 +4,14 @@ namespace Brainfit\Api;
 class SecurityFactory
 {
     /**
+     * @param $sNamespace
      * @param $sClassName
+     *
      * @return bool
      */
-    public static function get($sClassName)
+    public static function get($sNamespace, $sClassName)
     {
-        $sClassName = '\\Api\\Security\\Security'.ucfirst($sClassName);
+        $sClassName = $sNamespace.'\\Api\\Security\\Security'.ucfirst($sClassName);
 
         if(!class_exists($sClassName))
             return false;

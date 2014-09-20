@@ -4,10 +4,12 @@ namespace Brainfit\Api;
 class MethodFactory
 {
     /**
+     * @param $sNamespace
      * @param $sMethodName
+     *
      * @return bool
      */
-    public static function get($sMethodName)
+    public static function get($sNamespace, $sMethodName)
     {
         $aNewInstanceName = [];
 
@@ -17,7 +19,7 @@ class MethodFactory
         foreach(explode('.', $sMethodName) as $sItem)
             $aNewInstanceName[] = ucfirst(mb_convert_case($sItem, MB_CASE_LOWER));
 
-        $sClassName = '\\Api\\Method\\'.implode('\\', $aNewInstanceName);
+        $sClassName = $sNamespace.'\\Api\\Method\\'.implode('\\', $aNewInstanceName);
 
         if(!class_exists($sClassName))
             return false;
