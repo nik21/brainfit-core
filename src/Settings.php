@@ -75,8 +75,10 @@ class Settings
     {
         $ret = [];
 
-        foreach($aFiles as $sFile)
+        foreach($aFiles as $sNamespace => $sFile)
         {
+            $aNamespace = is_string($sNamespace) ? explode('/', $sNamespace) : [];
+
             try
             {
                 $aContent = Yaml::parse(file_get_contents($sFile));
@@ -85,8 +87,20 @@ class Settings
             {
                 throw new Exception('Yaml parser error: '.$e->getMessage(), $e->getCode());
             }
+
+            //Enter namespace
+            $retNamespaceChild = &$ret;
+            foreach($aNamespace as $sPath)
+            {
+                if (!isset($retNamespaceChild[$sPath]))
+                    $retNamespaceChild[$sPath] = [];
+
+                $retNamespaceChild = &$retNamespaceChild[$sPath];
+            }
+
+            //assign
             foreach($aContent as $k=>$v)
-                $ret[$k] = $v;
+                $retNamespaceChild[$k] = $v;
         }
 
         return $ret;
