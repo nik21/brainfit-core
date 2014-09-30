@@ -106,6 +106,7 @@ class TaskManager
         $sTaskId = (string)$aData['id'];
         $aParams = (array)$aData['params'];
         $sMethod = (string)$aData['method'];
+        $sNamespace = (string)$aData['namespace'];
 
         if(!$sTaskId || !$sMethod)
             throw new Exception('The task does not contain data: '.$sRawData);
@@ -117,7 +118,7 @@ class TaskManager
         //Execute API method
         $obInput = new InputFake($aParams);
 
-        $obOutput = MethodWrapper::execute($sMethod, $obInput);
+        $obOutput = MethodWrapper::execute($sNamespace, $sMethod, $obInput);
 
         if (self::$bDebug)
             echo($obOutput->get()."\n");
