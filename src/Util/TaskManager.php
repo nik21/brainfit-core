@@ -4,7 +4,7 @@ namespace Brainfit\Util;
 use Brainfit\Api\MethodWrapper;
 use Brainfit\Io\Input\InputFake;
 use Brainfit\Model\Exception;
-use Brainfit\Service\ServiceFactory;
+use Brainfit\Settings;
 use React\ChildProcess\Process;
 use React\EventLoop\LoopInterface;
 use React\Socket\Connection;
@@ -66,13 +66,10 @@ class TaskManager
             $this->loop = \React\EventLoop\Factory::create();
 
             if($iClientMode == 2)
-            {
-                //Call Service method
-                $this->executeServiceMethod();
-            }
+                $this->executeServiceMethods();
             else
             {
-                $this->executeServiceMethods();
+                $this->createProcess('', 'services_master', 2);
 
                 //Start listener
                 $this->executeMaster();
@@ -80,18 +77,6 @@ class TaskManager
 
             $this->loop->run();
         }
-    }
-
-    private function executeServiceMethod()
-    {
-        list($empty, $empty, $sClassName) = self::parseTaskHeader(self::readStdinData());
-
-        $obClass = ServiceFactory::get($sClassName);
-
-        if(!$obClass)
-            throw new Exception('Invalid class name');
-
-        $obClass->execute($this->loop);
     }
 
     private function executeChildMode()
@@ -188,32 +173,61 @@ class TaskManager
      */
     private function executeServiceMethods()
     {
-        $sServicesDir = ROOT.'/engine/Service/';
+        $aServices = Settings::get('SERVICES');
+        $sUniqueSalt = date('U');
 
-        if (!file_exists($sServicesDir))
-            return false;
-
-        if (!$aFiles = scandir($sServicesDir))
-            return false;
-
-        foreach($aFiles as $sFile)
+        foreach($aServices as $sNamespace=>$aServicesItems)
         {
-            if($sFile == '.' || $sFile == '..')
-                continue;
+            $this->loop->addPeriodicTimer(0.1, function() use (&$aServicesItems, $sUniqueSalt, $sNamespace){
+                //Выполнять не больше 1-ого экземпляра каждые interval мсек
+                foreach($aServicesItems as $sMethodName => &$aParams)
+                {
+                    $iTime = intval(microtime(true) * 1000);
+                    $iHour = date('G');
 
-            $sClassName = str_replace('.php', '', $sFile);
+                    $sTaskHash = sha1(implode('+', [$sUniqueSalt, $sMethodName]));
 
-            if (!ServiceFactory::get($sClassName))
-                continue;
+                    //Если интервал не указан, то, наверное, по часам надо выполнять
+                    if(isset($aParams['interval']))
+                    {
+                        //Если надо выполнять с интервалами, то проверяем, не рано ли выполнять
+                        if(isset($aParams['prevExecute']) && $aParams['prevExecute'] + $aParams['interval'] > $iTime)
+                            continue;
 
-            //Run child proccess:
-            $sSign = md5($sClassName);
-            $sLen = (string)strlen($sClassName);
-            $sLen = str_repeat('0', 8 - strlen($sLen)).$sLen;
-            $data = $sLen.$sClassName.$sSign."\n";
+                    }
+                    else if(isset($aParams['hours']))
+                    {
+                        //Если надо выполнять по часам, то проверяем, не пора ли выполнить (+ блокировка на час)
+                        if(isset($aParams['prevExecuteHour']) && ($aParams['prevExecuteHour'] == $iHour
+                                || !in_array($iHour, (array)$aParams['hours']))
+                        )
+                            continue;
 
-            $this->createProcess($data, 'service_'.$sClassName, 2);
+                    }
+
+                    //Пора выполнять, если не выполняется
+                    if(\Brainfit\Io\TaskManager::jobStatus($sTaskHash, '127.0.0.1', 5))
+                        continue;
+
+                    //Сбрасываем счетчик
+                    $aParams['prevExecute'] = $iTime;
+                    $aParams['prevExecuteHour'] = $iHour;
+
+                    //Выполняем
+                    Debugger::log('DAEMONS', "Execute {$sMethodName}");
+
+                    \Brainfit\Io\TaskManager::doBackground(
+                        $sNamespace,
+                        $sMethodName,
+                        [],
+                        '127.0.0.1',
+                        $sTaskHash,
+                        5
+                    );
+                }
+            });
         }
+
     }
 
     private function executeMaster()
@@ -237,17 +251,7 @@ class TaskManager
                 return;
             }
 
-            /*$obTimer = $this->loop->addTimer(self::CONNECTION_TIMEOUT, function () use (
-                &$conn, $sConnectionId, $sRemoteAddress
-            )
-            {
-                self::log($sConnectionId, "Close idle connection " . $sRemoteAddress);
-                $conn->end();
-            });*/
-
             $sTaskRawData = '';
-
-
             $run = function () use (&$sTaskRawData, $sConnectionId, $conn)
             {
                 //$data containts:
@@ -309,9 +313,6 @@ class TaskManager
 
             $conn->on('end', function () use ($conn, &$sTaskRawData, $sConnectionId)
             {
-                /*if($obTimer)
-                    $obTimer->cancel();*/
-
                 self::log($sConnectionId, "Close connection");
             });
         });
@@ -366,7 +367,7 @@ class TaskManager
         {
             unset($this->aProcesses[$sTaskId]);
 
-            self::log("{$sPid}\tChild exit");
+            self::log("{$sTaskId} Child exit {$sPid}");
         });
 
         $this->loop->addTimer(0.001, function ($timer) use ($process, &$sPid, &$sData, &$sTaskId)
@@ -375,7 +376,7 @@ class TaskManager
             $sPid = $process->getPid();
             $this->aProcesses[$sTaskId] = $process;
 
-            self::log("{$sPid}\tBegin new process");
+            self::log("{$sTaskId} Begin new process {$sPid}");
 
             for($i = 0; $i <= strlen($sData) - 512; $i += 512)
                 $process->stdin->write(substr($sData, $i, 512));
@@ -385,16 +386,16 @@ class TaskManager
 
             $process->stdin->end();
 
-            $process->stdout->on('data', function ($output) use ($sPid)
+            $process->stdout->on('data', function ($output) use ($sPid, $sTaskId)
             {
                 if($output)
-                    self::log("{$sPid}\tMessage from child: {$output}");
+                    self::log("{$sTaskId} Message {$output}");
             });
 
-            $process->stderr->on('data', function ($output) use ($sPid)
+            $process->stderr->on('data', function ($output) use ($sPid, $sTaskId)
             {
                 if($output)
-                    self::log("{$sPid}\tError from child: {$output}");
+                    self::log("{$sTaskId} Error {$output}");
             });
         });
 

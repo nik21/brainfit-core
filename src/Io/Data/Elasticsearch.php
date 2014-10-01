@@ -168,6 +168,11 @@ class Elasticsearch
         return $ret;
     }
 
+    public function ping()
+    {
+        return !!$this->obElasticSearch->ping();
+    }
+
     public function upsert($index, $type, $id, $docFields)
     {
         foreach ($docFields as $sFieldName => $value)
