@@ -85,8 +85,7 @@ class TaskManager
 
         if(md5($sRawData) != $sHashSum)
             throw new Exception('Child: Invalid header on request: '.$sHashSum.' != '.md5($sRawData)."\n");
-
-        //Разбираем данные
+        
         $aData = json_decode($sRawData, true);
         $sTaskId = (string)$aData['id'];
         $aParams = (array)$aData['params'];
@@ -179,7 +178,6 @@ class TaskManager
         foreach($aServices as $sNamespace=>$aServicesItems)
         {
             $this->loop->addPeriodicTimer(0.1, function() use (&$aServicesItems, $sUniqueSalt, $sNamespace){
-                //Выполнять не больше 1-ого экземпляра каждые interval мсек
                 foreach($aServicesItems as $sMethodName => &$aParams)
                 {
                     $iTime = intval(microtime(true) * 1000);
@@ -187,33 +185,37 @@ class TaskManager
 
                     $sTaskHash = sha1(implode('+', [$sUniqueSalt, $sMethodName]));
 
-                    //Если интервал не указан, то, наверное, по часам надо выполнять
                     if(isset($aParams['interval']))
                     {
-                        //Если надо выполнять с интервалами, то проверяем, не рано ли выполнять
+                        //If you need to perform at intervals, then check to see whether early to perform
                         if(isset($aParams['prevExecute']) && $aParams['prevExecute'] + $aParams['interval'] > $iTime)
                             continue;
 
                     }
                     else if(isset($aParams['hours']))
                     {
-                        //Если надо выполнять по часам, то проверяем, не пора ли выполнить (+ блокировка на час)
+                        //If you need to perform on the clock, then check whether it is time to perform
                         if(isset($aParams['prevExecuteHour']) && ($aParams['prevExecuteHour'] == $iHour
                                 || !in_array($iHour, (array)$aParams['hours']))
                         )
                             continue;
 
                     }
+                    else
+                    {
+                        if (isset($aParams['isOnce']))
+                            continue;
 
-                    //Пора выполнять, если не выполняется
+                        $aParams['isOnce'] = true;
+                    }
+
+                    //Time to perform, if not performed
                     if(\Brainfit\Io\TaskManager::jobStatus($sTaskHash, '127.0.0.1', 5))
                         continue;
 
-                    //Сбрасываем счетчик
                     $aParams['prevExecute'] = $iTime;
                     $aParams['prevExecuteHour'] = $iHour;
 
-                    //Выполняем
                     Debugger::log('DAEMONS', "Execute {$sMethodName}");
 
                     \Brainfit\Io\TaskManager::doBackground(
