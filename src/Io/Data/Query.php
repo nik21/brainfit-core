@@ -59,12 +59,22 @@ class Query
     {
         if(!isset(self::$dbh[$this->sServerName]))
         {
-            if(!$sServer = Settings::get('MYSQL', 'servers', $this->sServerName, 'server'))
-                throw new Exception('Mysql server with id ' . $this->sServerName . ' not found in config file');
-
             $sUser = Settings::get('MYSQL', 'servers', $this->sServerName, 'login');
             $sPassword = Settings::get('MYSQL', 'servers', $this->sServerName, 'password');
-            $sDefaultDb = Settings::get('MYSQL', 'servers', $this->sServerName, 'db');
+
+            if (!$sDsn = Settings::get('MYSQL', 'servers', $this->sServerName, 'dsn'))
+            {
+                if(!$sServer = Settings::get('MYSQL', 'servers', $this->sServerName, 'server'))
+                    throw new Exception('Mysql server with id ' . $this->sServerName . ' not found in config file');
+
+                if (!$iPort = (int)Settings::get('MYSQL', 'servers', $this->sServerName, 'port'))
+                    $iPort = 3306;
+
+                if (!$sDefaultDb = Settings::get('MYSQL', 'servers', $this->sServerName, 'db'))
+                    throw new Exception('Mysql server default db not defined');
+
+                $sDsn = "mysql:host={$sServer};port={$iPort};dbname={$sDefaultDb};charset=UTF8";
+            }
 
             try
             {
@@ -74,8 +84,7 @@ class Query
                 $driver_options = [PDO::ATTR_PERSISTENT => false, PDO::ATTR_EMULATE_PREPARES => false];
 
                 //not usage MYSQL_ATTR_INIT_COMMAND and SET character_set_results = 'utf8' and other.. This is not safe!
-                self::$dbh[$this->sServerName] = new \PDO("mysql:host={$sServer};dbname={$sDefaultDb};charset=UTF8", $sUser, $sPassword,
-                    $driver_options);
+                self::$dbh[$this->sServerName] = new \PDO($sDsn, $sUser, $sPassword, $driver_options);
             }
             catch (\PDOException $e)
             {
