@@ -11,6 +11,10 @@ function includeIfExists($file)
     }
 }
 
+$aProcessUser = posix_getpwuid(posix_geteuid());
+if ($aProcessUser['name'] == 'root')
+    die('Do not start the service as root');
+
 if($loader = includeIfExists(__DIR__.'/../vendor/autoload.php'))
     define('ROOT', dirname(__FILE__).'/../');
 else if($loader = includeIfExists(__DIR__.'/../../../autoload.php'))
