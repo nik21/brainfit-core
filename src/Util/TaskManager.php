@@ -59,8 +59,9 @@ class TaskManager
         if(!$this->iPort)
             $this->iPort = 4000;
 
-        if (get_current_user() == 'root')
-            throw new Exception('Use another user (maybe, www-data?)');
+        $aProcessUser = posix_getpwuid(posix_geteuid());
+        if ($aProcessUser['name'] == 'root')
+            throw new Exception('Do not start the service as root');
 
         if($iClientMode == 1)
         {
