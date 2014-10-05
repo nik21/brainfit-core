@@ -1,4 +1,5 @@
 <?php
+
 namespace Brainfit\Util;
 
 use Brainfit\Api\MethodWrapper;
@@ -23,6 +24,7 @@ class TaskManager
     private $sHost = '127.0.0.1';
     private $iPort = 4000;
     private static $bDebug = false;
+    private $sCurrentFile = '';
 
     /**
      * @var Process[]
@@ -42,8 +44,9 @@ class TaskManager
      *
      * @param $aOptions
      */
-    public function run($aOptions)
+    public function run($sFile, $aOptions)
     {
+        $this->sCurrentFile = $sFile;
         $this->sCwd = getcwd();
 
         $this->sHost = $aOptions['h'];
@@ -56,6 +59,9 @@ class TaskManager
         if(!$this->iPort)
             $this->iPort = 4000;
 
+        if (get_current_user() == 'root')
+            throw new Exception('Use another user (maybe, www-data?)');
+
         if($iClientMode == 1)
         {
             //Call API method
@@ -64,6 +70,14 @@ class TaskManager
         else
         {
             $this->loop = \React\EventLoop\Factory::create();
+
+
+            $this->bindSignals();
+            $this->loop->addPeriodicTimer(2, function(){
+                pcntl_signal_dispatch();
+            });
+
+
 
             if($iClientMode == 2)
                 $this->executeServiceMethods();
@@ -79,13 +93,31 @@ class TaskManager
         }
     }
 
+    private function bindSignals()
+    {
+        pcntl_signal(SIGTERM, [$this, "sigHandler"]);
+        pcntl_signal(SIGINT, [$this, "sigHandler"]);
+    }
+
+    public function sigHandler($signo)
+    {
+        echo 'Killme '.getmypid().PHP_EOL;
+
+        foreach(array_keys($this->aProcesses) as $sProcessName)
+            $this->killProcess($sProcessName);
+
+        //        $this->loop->addTimer(5, function(){
+        exit;
+        //        });
+    }
+
     private function executeChildMode()
     {
         list($empty, $sHashSum, $sRawData) = self::parseTaskHeader(self::readStdinData());
 
         if(md5($sRawData) != $sHashSum)
             throw new Exception('Child: Invalid header on request: '.$sHashSum.' != '.md5($sRawData)."\n");
-        
+
         $aData = json_decode($sRawData, true);
         $sTaskId = (string)$aData['id'];
         $aParams = (array)$aData['params'];
@@ -360,7 +392,7 @@ class TaskManager
     private function createProcess($sData, $sTaskId, $iType = 1)
     {
         //Now create the process and pass it on STDIN data
-        $process = new \React\ChildProcess\Process('./bin/daemon -c '.$iType.' -h '.$this->sHost.' -p '.$this->iPort,
+        $process = new \React\ChildProcess\Process($this->sCurrentFile.' -c '.$iType.' -h '.$this->sHost.' -p '.$this->iPort,
             $this->sCwd);
 
         $sPid = 'Unknown';
