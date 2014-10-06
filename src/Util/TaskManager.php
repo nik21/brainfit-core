@@ -14,8 +14,8 @@ use React\Socket\Connection;
  * Class TaskManager
  * @package Brainfit\Util
  *
- * Process create new php-processes for run methods from Api/Method namesapces.
- * Do this using doBackground method in /Brainfit/Io/TaskManager class
+ * Daemon create and manage new php-processes for execute api-methods.
+ * Using doBackground method in /Brainfit/Io/TaskManager class
  */
 class TaskManager
 {
@@ -42,7 +42,9 @@ class TaskManager
      * @internal param p — port
      * @internal param c — client mode
      *
+     * @param $sFile
      * @param $aOptions
+     * @throws Exception
      */
     public function run($sFile, $aOptions)
     {
@@ -54,10 +56,14 @@ class TaskManager
         $iClientMode = (int)$aOptions['c'];
         self::$bDebug = $aOptions['d'] ? true : false;
 
-        if(!$this->sHost || $this->sHost == 'localhost')
-            $this->sHost = '127.0.0.1';
-        if(!$this->iPort)
-            $this->iPort = 4000;
+        if(!$this->sHost || $this->iPort <= 0)
+        {
+            $this->sHost = Settings::get('TASK_DAEMON', 'host');
+            $this->iPort = (int)Settings::get('TASK_DAEMON', 'port');
+        }
+
+        if(!$this->sHost || $this->iPort <=0)
+            throw new Exception('Invalid host or port');
 
         if($iClientMode == 1)
         {
@@ -96,21 +102,17 @@ class TaskManager
         pcntl_signal(SIGINT, [$this, "sigHandler"]);
     }
 
-    public function sigHandler($signo)
+    public function sigHandler()
     {
-        echo 'Killme '.getmypid().PHP_EOL;
-
         foreach(array_keys($this->aProcesses) as $sProcessName)
             $this->killProcess($sProcessName);
 
-        //        $this->loop->addTimer(5, function(){
         exit;
-        //        });
     }
 
     private function executeChildMode()
     {
-        list($empty, $sHashSum, $sRawData) = self::parseTaskHeader(self::readStdinData());
+        list(, $sHashSum, $sRawData) = self::parseTaskHeader(self::readStdinData());
 
         if(md5($sRawData) != $sHashSum)
             throw new Exception('Child: Invalid header on request: '.$sHashSum.' != '.md5($sRawData)."\n");
@@ -124,7 +126,7 @@ class TaskManager
         if(!$sTaskId || !$sMethod)
             throw new Exception('The task does not contain data: '.$sRawData);
 
-        //Ip alreade needed
+        //Ip already needed
         if(!isset($aParams['ip']))
             $aParams['ip'] = '127.0.0.1';
 
@@ -285,14 +287,14 @@ class TaskManager
             $sTaskRawData = '';
             $run = function () use (&$sTaskRawData, $sConnectionId, $conn)
             {
-                //$data containts:
+                //$data contains:
                 //data size (json-string) in dec value (8 bytes)
                 //JSON-object with fields "id", "params", "method" or "id", "action"
                 //md5 checksum of JSON
                 //\0 byte
 
                 //Check signature
-                list($empty, $sHashSum, $sRawData) = self::parseTaskHeader($sTaskRawData);
+                list(, $sHashSum, $sRawData) = self::parseTaskHeader($sTaskRawData);
 
                 if(md5($sRawData) != $sHashSum)
                 {
@@ -353,7 +355,11 @@ class TaskManager
         $socket->listen($this->iPort, $this->sHost);
     }
 
-    private static function log($string1 = '', $string2 = '', $stringN = '')
+
+    /**
+     * @return bool
+     */
+    private static function log()
     {
         $message = '';
         for($i = 0; $i < func_num_args(); $i++)
@@ -389,8 +395,8 @@ class TaskManager
     private function createProcess($sData, $sTaskId, $iType = 1)
     {
         //Now create the process and pass it on STDIN data
-        $process = new \React\ChildProcess\Process($this->sCurrentFile.' -c '.$iType.' -h '.$this->sHost.' -p '.$this->iPort,
-            $this->sCwd);
+        $process = new \React\ChildProcess\Process($this->sCurrentFile.' -c '.$iType.' -h '.$this->sHost.' -p '
+            .$this->iPort, $this->sCwd);
 
         $sPid = 'Unknown';
 

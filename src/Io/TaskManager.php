@@ -3,6 +3,7 @@
 namespace Brainfit\Io;
 
 use Brainfit\Model\Exception;
+use Brainfit\Settings;
 
 class TaskManager
 {
@@ -25,14 +26,14 @@ class TaskManager
     }
 
     /**
+     * @param $aData
      * @param $sServer
      * @param $iTimeout
-     * @param $aData
-     *
-     * @return bool|array
-     * @throws \Brainfit\Model\Exception
+     * @return bool|mixed
+     * @throws Exception
      */
-    private static function send($sServer, $iTimeout, $aData)
+
+    private static function send($aData, $sServer = '', $iTimeout = 5)
     {
         //Prepare data
         $sRaw = json_encode($aData);
@@ -43,13 +44,16 @@ class TaskManager
 
         //////////////
         list($sHost, $iPort) = explode(':', (string)$sServer);
-
         $iPort = (int)$iPort;
-        if(!$iPort)
-            $iPort = 4000;
 
-        if(!$sHost)
-            $sHost = '127.0.0.1';
+        if($iPort <= 0 || !$sHost)
+        {
+            $sHost = Settings::get('TASK_DAEMON', 'host');
+            $iPort = (int)Settings::get('TASK_DAEMON', 'port');
+        }
+
+        if(!$sHost || $iPort <=0)
+            throw new Exception('Invalid host or port');
 
         $iTimeout = (int)$iTimeout;
         if($iTimeout < 1)
