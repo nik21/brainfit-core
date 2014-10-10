@@ -341,8 +341,11 @@ class Query
 
         //Collect tables
         $aTablesList = [];
-        foreach ($this->aBuilder['tables'] as $aTableItem)
-            $aTablesList[] = $aTableItem['name'] . ' ' . $aTableItem['suffix'];
+        if (isset($this->aBuilder['tables']))
+        {
+            foreach($this->aBuilder['tables'] as $aTableItem)
+                $aTablesList[] = $aTableItem['name'].' '.$aTableItem['suffix'];
+        }
 
 
         if($mainAction == 'insert')
