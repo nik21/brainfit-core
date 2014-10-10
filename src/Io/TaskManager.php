@@ -19,7 +19,7 @@ class TaskManager
             'namespace' => $sNamespace
         ];
 
-        if(self::send($sServer, $iTimeout, $aData) !== false)
+        if(self::send($aData, $sServer, $iTimeout) !== false)
             return $sTransactionId;
         else
             return false;
@@ -86,7 +86,7 @@ class TaskManager
 
     public static function check($sServer, $iTimeout = 10)
     {
-        $aData = self::send($sServer, $iTimeout, ['action' => 'ping']);
+        $aData = self::send(['action' => 'ping'], $sServer, $iTimeout);
 
         return isset($aData['result']);
     }
@@ -112,7 +112,7 @@ class TaskManager
             'action' => 'check'
         ];
 
-        $aAnswer = self::send($sServer, $iTimeout, $aData);
+        $aAnswer = self::send($aData, $sServer, $iTimeout);
 
         return isset($aAnswer['status']) ? (int)$aAnswer['status'] : false;
     }
@@ -128,6 +128,6 @@ class TaskManager
             'action' => 'kill'
         ];
 
-        return self::send($sServer, $iTimeout, $aData) !== false;
+        return self::send($aData, $sServer, $iTimeout) !== false;
     }
 }
