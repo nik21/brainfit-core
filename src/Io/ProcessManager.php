@@ -1,8 +1,6 @@
 <?php
 namespace Brainfit\Io;
 
-use Brainfit\Util\Debugger;
-
 class ProcessManager
 {
     private static $aProcesses;

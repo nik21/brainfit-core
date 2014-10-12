@@ -19,6 +19,7 @@
         "ext-redis": "For use Storage class",
         "elasticsearch/elasticsearch": "Provide simple class",
         "react/react": "For running daemon processes",
+        "monolog/monolog": "For logging elasticsearch and sql operations",
         "pilat/smarty": "If your use Smarty as output interface"
     },
     "autoload": {

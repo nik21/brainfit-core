@@ -247,8 +247,6 @@ class TaskManager
                     $aParams['prevExecute'] = $iTime;
                     $aParams['prevExecuteHour'] = $iHour;
 
-                    Debugger::log('DAEMONS', "Execute {$sMethodName}");
-
                     \Brainfit\Io\TaskManager::doBackground(
                         $sNamespace,
                         $sMethodName,

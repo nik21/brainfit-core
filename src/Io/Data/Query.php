@@ -4,7 +4,6 @@ namespace Brainfit\Io\Data;
 use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Model\Exception;
 use Brainfit\Settings;
-use Brainfit\Util\Debugger;
 use PDO;
 
 /**
@@ -34,6 +33,8 @@ class Query
 
     //result:
     private $iCalcFoundRows = 0;
+
+    private static $bWithoutDebug = false;
 
 
     public function __construct($sServerName)
@@ -436,12 +437,11 @@ class Query
             $aResult = (array)$obApc->fetch($sCacheKey . 'v');
             $this->iCalcFoundRows = (int)$obApc->fetch($sCacheKey . 'f');
 
-            $this->saveForProfiling($sSql, 'from cache');
+            $this->addDebug($sSql, 'from cache');
 
             //debug:
             if($sDumpName = $this->aBuilder['params']['getDump'])
-                Debugger::clientLog('HIDDEN' . ($sDumpName ? 'sql' : $sDumpName) . ' [cache]: ' . $sSql,
-                    $aResult);
+                $this->addDebug('dump', $sDumpName, $aResult);
 
             return $aResult;
         }
@@ -449,10 +449,10 @@ class Query
         if($iCache == -1)
         {
             $obApc->delete([$sCacheKey . 'v', $sCacheKey . 'f']);
-            $this->saveForProfiling($sSql, 'clean cache query');
+            $this->addDebug($sSql, 'clean cache query');
         }
         else
-            $this->saveForProfiling($sSql, 'direct query');
+            $this->addDebug($sSql, 'direct query');
 
         //Begin
         $this->CreateQuery($sSql, !$this->aBuilder['params']['foundRows'], $this->aExecuteValues);
@@ -513,7 +513,7 @@ class Query
         }
 
         if($sDumpName = $this->aBuilder['params']['getDump'])
-            Debugger::clientLog('HIDDEN' . ($sDumpName ? 'sql' : $sDumpName) . ': [query]: ' . $sSql, $aResult);
+            $this->addDebug('dump', $sDumpName, $aResult);
 
         if($iCache)
         {
@@ -524,9 +524,40 @@ class Query
         return $aResult;
     }
 
-    private function saveForProfiling($sSql, $sGroupName)
+    /**
+     * Method used monolog instance "sql" for debugg queries
+     *
+     * @param $sSql
+     * @param $sGroupName
+     */
+    private function addDebug($sSql, $sGroupName, $dump = null)
     {
-        self::$profilingInfo[$this->sServerName][$sGroupName][] = $sSql;
+        if (self::$bWithoutDebug)
+            return;
+
+        if (!class_exists('\\Monolog\\Registry'))
+        {
+            self::$bWithoutDebug = true;
+            return;
+        }
+
+        $obInstance = null;
+        try
+        {
+            $obInstance = \Monolog\Registry::getInstance('sql');
+        }catch (\InvalidArgumentException $e)
+        {
+
+        }
+
+        if (!$obInstance)
+        {
+            self::$bWithoutDebug = true;
+            return;
+        }
+
+        $obInstance->addDebug($sSql, ['type'=>$sGroupName, 'params' => $this->aExecuteValues]
+            + (is_null($dump) ? [] : ['dump' => $dump]));
     }
 
     public function dump($sDescription = 'query')
@@ -558,10 +589,7 @@ class Query
         try
         {
             if(!$stmt = self::getPdo()->prepare($strSQLQuery))
-            {
-                Debugger::log('Query syntax problem:'.$strSQLQuery);
                 throw new Exception('Query syntax problem');
-            }
 
             $stmt->execute($params);
             $this->obStmp = $stmt;
@@ -577,7 +605,6 @@ class Query
         }
         catch (\PDOException $e)
         {
-            Debugger::log('Mysql error:', $e->getMessage(), 'Query:', $strSQLQuery);
             throw new Exception('Mysql error #' . $e->getCode(), 1);
         }
 

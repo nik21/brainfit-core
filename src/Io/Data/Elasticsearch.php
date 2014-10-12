@@ -3,7 +3,6 @@ namespace Brainfit\Io\Data;
 
 use Brainfit\Model\Exception;
 use Brainfit\Settings;
-use Brainfit\Util\Debugger;
 
 class Elasticsearch
 {
@@ -12,6 +11,7 @@ class Elasticsearch
     private static $aInstances = [];
     private $obElasticSearch = false;
     private $aCommandQueue = [];
+    private static $bWithoutDebug = false;
 
     public function __construct($sServerId)
     {
@@ -62,7 +62,7 @@ class Elasticsearch
             foreach (self::$aInstances as $obElasticInstances)
                 $obElasticInstances->transfer();
         } catch (\Exception $e) {
-            Debugger::log('Elasticsearch problems', $e->getMessage(), $e->getLine());
+            self::addDebug('Elasticsearch problems');
         }
 
         self::$aInstances = null;
@@ -77,7 +77,7 @@ class Elasticsearch
             return;
 
         if (self::DEBUG && isset($this->aCommandQueue['upsert']))
-            Debugger::log('Elastic upsert', print_r($this->aCommandQueue['upsert'], true));
+            self::addDebug('Elastic upsert', $this->aCommandQueue['upsert']);
 
         //Update or insert
         foreach ((array)$this->aCommandQueue['upsert'] as $index => $data1) {
@@ -102,12 +102,12 @@ class Elasticsearch
                 $ret = $this->obElasticSearch->bulk($params);
 
                 if(!$ret || $ret['error'])
-                    Debugger::log('Elasticsearch problems', 'Upsert trouble', $ret);
+                    self::addDebug('Elasticsearch problems: upsert trouble', $ret);
             }
         }
 
         if (self::DEBUG && isset($this->aCommandQueue['delete']))
-            Debugger::log('Elastic delete', print_r($this->aCommandQueue['delete'], true));
+            self::addDebug('Elastic delete', $this->aCommandQueue['delete']);
 
         //Delete
         foreach ((array)$this->aCommandQueue['delete'] as $index => $data1) {
@@ -120,7 +120,7 @@ class Elasticsearch
                     ]);
 
                     if(!$ret || !$ret['ok'])
-                        Debugger::log('Elasticsearch problems', 'Delete trouble '. $id. ' '.$type.' '.$index);
+                        self::addDebug('Elasticsearch problems: Delete trouble '. $id. ' '.$type.' '.$index);
                 }
             }
         }
@@ -135,7 +135,7 @@ class Elasticsearch
             return [];
 
         if (self::DEBUG)
-            Debugger::log('Elastic search', print_r($body, true));
+            self::addDebug('Elastic search', $body);
 
         try
         {
@@ -159,7 +159,7 @@ class Elasticsearch
         }
 
         if($ret['error']) {
-            Debugger::log('Elasticsearch problems', 'Search trouble '.print_r($body, true).' '.$type.' '.$index,
+            self::addDebug('Elasticsearch problems: Search trouble '.print_r($body, true).' '.$type.' '.$index,
                 $ret['error']);
 
             return false;
@@ -189,5 +189,35 @@ class Elasticsearch
         $this->aCommandQueue['delete'][$index][$type][] = $id;
 
         return true;
+    }
+
+    private static function addDebug($sMessage, $params = [])
+    {
+        if (self::$bWithoutDebug)
+            return;
+
+        if (!class_exists('\\Monolog\\Registry'))
+        {
+            self::$bWithoutDebug = true;
+            return;
+        }
+
+        $obInstance = null;
+        try
+        {
+            $obInstance = \Monolog\Registry::getInstance('elasicsearch');
+        }catch (\InvalidArgumentException $e)
+        {
+
+        }
+
+        if (!$obInstance)
+        {
+            self::$bWithoutDebug = true;
+            return;
+        }
+
+        $params = (array)$params;
+        $obInstance->addDebug($sMessage, $params);
     }
 }
