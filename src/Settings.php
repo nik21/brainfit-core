@@ -17,7 +17,7 @@ class Settings
     private static $iTTL = 0;
     private static $sVersion = '';
 
-    public static function useDoctrineCache(\Doctrine\Common\Cache\Cache $obCache, $iTTL = 0, $sVersion = '')
+    public static function setQueryCacheImpl(\Doctrine\Common\Cache\Cache $obCache, $iTTL = 0, $sVersion = '')
     {
         self::$cache = $obCache;
         self::$iTTL = $iTTL;

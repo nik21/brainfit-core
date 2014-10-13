@@ -1,7 +1,6 @@
 <?php
 namespace Brainfit\Io\Data;
 
-use Brainfit\Io\Data\Drivers\Apc;
 use Brainfit\Model\Exception;
 use Brainfit\Settings;
 use PDO;
@@ -12,6 +11,10 @@ use PDO;
  */
 class Query
 {
+    /**
+     * @var \Doctrine\Common\Cache\Cache
+     */
+    private static $cache = null;
     private $sServerName;
 
     public static $profilingInfo = [];
@@ -42,6 +45,11 @@ class Query
         $this->sServerName = $sServerName;
     }
 
+    public static function setQueryCacheImpl(\Doctrine\Common\Cache\Cache $obCache)
+    {
+        self::$cache = $obCache;
+    }
+
     /**
      * @param string $sServerName
      *
@@ -63,15 +71,15 @@ class Query
             $sUser = Settings::get('MYSQL', 'servers', $this->sServerName, 'login');
             $sPassword = Settings::get('MYSQL', 'servers', $this->sServerName, 'password');
 
-            if (!$sDsn = Settings::get('MYSQL', 'servers', $this->sServerName, 'dsn'))
+            if(!$sDsn = Settings::get('MYSQL', 'servers', $this->sServerName, 'dsn'))
             {
                 if(!$sServer = Settings::get('MYSQL', 'servers', $this->sServerName, 'server'))
                     throw new Exception('Mysql server with id ' . $this->sServerName . ' not found in config file');
 
-                if (!$iPort = (int)Settings::get('MYSQL', 'servers', $this->sServerName, 'port'))
+                if(!$iPort = (int)Settings::get('MYSQL', 'servers', $this->sServerName, 'port'))
                     $iPort = 3306;
 
-                if (!$sDefaultDb = Settings::get('MYSQL', 'servers', $this->sServerName, 'db'))
+                if(!$sDefaultDb = Settings::get('MYSQL', 'servers', $this->sServerName, 'db'))
                     throw new Exception('Mysql server default db not defined');
 
                 $sDsn = "mysql:host={$sServer};port={$iPort};dbname={$sDefaultDb};charset=UTF8";
@@ -104,7 +112,7 @@ class Query
             return $this->escapeInt($variable);
         else if(is_string($variable))
             return $this->addNamedVariable($variable);
-        else if (is_bool($variable))
+        else if(is_bool($variable))
             return $variable ? 1 : 0;
         else
             throw new Exception('Invalid variable');
@@ -157,7 +165,7 @@ class Query
     {
         $this->iPointer++;
 
-        $value = & $this->aLoadedValues[$this->iPointer - 1];
+        $value = &$this->aLoadedValues[$this->iPointer - 1];
 
         if($params[1] == '%i')
             return $this->escapeInt($value);
@@ -335,17 +343,17 @@ class Query
 
     private function prepareSql($mainAction)
     {
-        if ($this->aBuilder['director'])
+        if($this->aBuilder['director'])
             throw new Exception('you use director mode');
 
         $sResultSql = '';
 
         //Collect tables
         $aTablesList = [];
-        if (isset($this->aBuilder['tables']))
+        if(isset($this->aBuilder['tables']))
         {
-            foreach($this->aBuilder['tables'] as $aTableItem)
-                $aTablesList[] = $aTableItem['name'].' '.$aTableItem['suffix'];
+            foreach ($this->aBuilder['tables'] as $aTableItem)
+                $aTablesList[] = $aTableItem['name'] . ' ' . $aTableItem['suffix'];
         }
 
 
@@ -384,7 +392,7 @@ class Query
                 $sResultSql = 'SELECT ' . ($this->aBuilder['isDistinct'] ? 'DISTINCT ' : '')
                     . implode(', ', $this->aBuilder['fields']);
 
-            if ($aTablesList)
+            if($aTablesList)
                 $sResultSql .= ' FROM ' . implode(', ', $aTablesList);
         }
         else if($mainAction == 'delete')
@@ -428,14 +436,28 @@ class Query
             throw new Exception('Invalid call sequence');
 
         //maybe from cache
-        $sCacheKey = sha1($sSql . implode(array_values($this->aExecuteValues)));
         $iCache = (int)$this->aBuilder['params']['cache'];
-        $obApc = Apc::getInstance();
+        $isCacheUsed = $iCache != 0 && !is_null(self::$cache);
 
-        if($iCache > 0 && !$obApc->add($sCacheKey, 1, $iCache))
+        $sCacheKey = $isCacheUsed ? sha1($sSql . implode(array_values($this->aExecuteValues))) : false;
+        $isDataExist = false;
+
+        if($iCache < 0 && $isCacheUsed)
         {
-            $aResult = (array)$obApc->fetch($sCacheKey . 'v');
-            $this->iCalcFoundRows = (int)$obApc->fetch($sCacheKey . 'f');
+            self::$cache->delete($sCacheKey . 'dataExists');
+            self::$cache->delete($sCacheKey . 'noNeedUpdate');
+
+            $this->addDebug($sSql, 'clean cache query');
+        }
+        else if($iCache > 0 && $isCacheUsed)
+            $isDataExist = self::$cache->fetch($sCacheKey . 'dataExists');
+
+        //if used caching and state flag is exist, return from cache
+        if($isDataExist)
+        {
+            list($aResult, $this->iCalcFoundRows) = self::$cache->fetch($sCacheKey . 'data');
+            $aResult = (array)$aResult;
+            $this->iCalcFoundRows = (int)$this->iCalcFoundRows;
 
             $this->addDebug($sSql, 'from cache');
 
@@ -443,17 +465,40 @@ class Query
             if($sDumpName = $this->aBuilder['params']['getDump'])
                 $this->addDebug('dump', $sDumpName, $aResult);
 
-            return $aResult;
+            //Надо ли обновить?
+            $isNeedUpdate = !self::$cache->fetch($sCacheKey . 'flag');
+
+            if($isNeedUpdate)
+            {
+                self::$cache->save($sCacheKey . 'flag', 1, $iCache);
+
+                $this->addDebug($sSql, 'query and caching');
+                $aResult = $this->internalDirectGetResults($sSql);
+                self::$cache->save($sCacheKey . 'data', [$aResult, $this->iCalcFoundRows], $iCache * 2);
+                self::$cache->save($sCacheKey . 'dataExists', 1, $iCache * 2);
+
+                return $aResult;
+            }
+            else
+                return $aResult;
         }
 
-        if($iCache == -1)
+        $this->addDebug($sSql, 'direct query' . ($isCacheUsed ? ' first' : ''));
+        $aResult = $this->internalDirectGetResults($sSql);
+
+
+        if($isCacheUsed && $iCache > 0)
         {
-            $obApc->delete([$sCacheKey . 'v', $sCacheKey . 'f']);
-            $this->addDebug($sSql, 'clean cache query');
+            self::$cache->save($sCacheKey . 'data', [$aResult, $this->iCalcFoundRows], $iCache * 2);
+            self::$cache->save($sCacheKey . 'dataExists', 1, $iCache * 2);
+            self::$cache->save($sCacheKey . 'flag', 1, $iCache);
         }
-        else
-            $this->addDebug($sSql, 'direct query');
 
+        return $aResult;
+    }
+
+    private function internalDirectGetResults($sSql)
+    {
         //Begin
         $this->CreateQuery($sSql, !$this->aBuilder['params']['foundRows'], $this->aExecuteValues);
 
@@ -515,12 +560,6 @@ class Query
         if($sDumpName = $this->aBuilder['params']['getDump'])
             $this->addDebug('dump', $sDumpName, $aResult);
 
-        if($iCache)
-        {
-            $obApc->store($sCacheKey . 'v', $aResult, $iCache * 2);
-            $obApc->store($sCacheKey . 'f', $this->iCalcFoundRows, $iCache * 2);
-        }
-
         return $aResult;
     }
 
@@ -532,12 +571,13 @@ class Query
      */
     private function addDebug($sSql, $sGroupName, $dump = null)
     {
-        if (self::$bWithoutDebug)
+        if(self::$bWithoutDebug)
             return;
 
-        if (!class_exists('\\Monolog\\Registry'))
+        if(!class_exists('\\Monolog\\Registry'))
         {
             self::$bWithoutDebug = true;
+
             return;
         }
 
@@ -545,19 +585,25 @@ class Query
         try
         {
             $obInstance = \Monolog\Registry::getInstance('sql');
-        }catch (\InvalidArgumentException $e)
+        }
+        catch (\InvalidArgumentException $e)
         {
 
         }
 
-        if (!$obInstance)
+        if(!$obInstance)
         {
             self::$bWithoutDebug = true;
+
             return;
         }
 
-        $obInstance->addDebug($sSql, ['type'=>$sGroupName, 'params' => $this->aExecuteValues]
-            + (is_null($dump) ? [] : ['dump' => $dump]));
+        if(!is_null($dump))
+        {
+            $obInstance->addDebug($sSql, ['type' => $sGroupName, 'params' => $this->aExecuteValues, 'dump' => $dump]);
+        }
+        else
+            $obInstance->addDebug($sSql, ['type' => $sGroupName]);
     }
 
     public function dump($sDescription = 'query')
@@ -614,6 +660,7 @@ class Query
     public function director()
     {
         $this->aBuilder['director'] = true;
+
         return $this->getPdo();
     }
 
@@ -626,16 +673,17 @@ class Query
 
     public function set($field, $value = null)
     {
-        if (is_array($field))
+        if(is_array($field))
         {
             //multi-set
-            foreach($field as $k=>$v)
+            foreach ($field as $k => $v)
                 $this->set($k, $v);
 
             return $this;
         }
 
         $this->aBuilder['set']['`' . $field . '`'] = $this->escape2($value);
+
         return $this;
     }
 

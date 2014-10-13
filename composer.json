@@ -12,7 +12,7 @@
         "php":">=5.4.0",
         "ext-pdo": "*",
         "ext-apcu": "*",
-        "symfony/yaml": "2.5.3"
+        "symfony/yaml": "2.5.5"
     },
     "suggest": {
         "ext-memcached": "Memcached class",
@@ -20,7 +20,8 @@
         "elasticsearch/elasticsearch": "Provide simple class",
         "react/react": "For running daemon processes",
         "monolog/monolog": "For logging elasticsearch and sql operations",
-        "pilat/smarty": "If your use Smarty as output interface"
+        "pilat/smarty": "If your use Smarty as output interface",
+        "doctrine/cache": "For caching Query and Settings classes"
     },
     "autoload": {
         "psr-4": {
