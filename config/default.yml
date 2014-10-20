@@ -21,7 +21,3 @@ ROUTING:
 PROJECT:
  #Trusted internal network or server cluster, separated by commas. You can write any number of octets
  INTERNAL_NETWORKS: [127.0.0.1, 192.168.56.]
-
-TASK_DAEMON:
-  host: 127.0.0.1
-  port: 4000

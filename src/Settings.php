@@ -24,10 +24,20 @@ class Settings
         self::$sVersion = $sVersion;
     }
 
+    /**
+     * Load any configuration files together. All repetitive sections redefined.
+     * If you do not download the files will be loaded /config/default.yml
+     *
+     * @param $aConfigurationFiles
+     * @throws Exception
+     */
     public static function loadConfiguration($aConfigurationFiles)
     {
         if (!is_null(self::$aConfigurationFiles))
             throw new Exception('Configuration already loaded');
+
+        if (!is_array($aConfigurationFiles))
+            $aConfigurationFiles = [$aConfigurationFiles];
 
         self::$aConfigurationFiles = $aConfigurationFiles;
     }
@@ -35,7 +45,7 @@ class Settings
     public static function get()
     {
         if (is_null(self::$aConfigurationFiles))
-            throw new Exception('Configuration not loaded');
+            self::loadConfiguration(ROOT.'/config/default.yml');
 
         //when file changes, your fetch old values
         if (!is_null(self::$cache))

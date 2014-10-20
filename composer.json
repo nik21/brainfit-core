@@ -11,24 +11,20 @@
     "require": {
         "php":">=5.4.0",
         "ext-pdo": "*",
-        "ext-apcu": "*",
         "symfony/yaml": "2.5.5"
     },
     "suggest": {
         "ext-memcached": "Memcached class",
         "ext-redis": "For use Storage class",
         "elasticsearch/elasticsearch": "Provide simple class",
+        "pilat/smarty": "If your use Smarty as output interface",
         "react/react": "For running daemon processes",
         "monolog/monolog": "For logging elasticsearch and sql operations",
-        "pilat/smarty": "If your use Smarty as output interface",
         "doctrine/cache": "For caching Query and Settings classes"
     },
     "autoload": {
         "psr-4": {
             "Brainfit\\": "src"
         }
-    },
-    "bin": [
-        "bin/daemon"
-    ]
+    }
 }

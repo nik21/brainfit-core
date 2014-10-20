@@ -11,6 +11,7 @@ class Strings
         switch($sParam)
         {
             case 'id': if (preg_match("/^\d{".$iMin.','.$iMax."}$/",$sValue)){ return true; } break;
+            case 'ip': if(filter_var($sValue, FILTER_VALIDATE_IP)){ return true; } break;
             case 'float': if (preg_match("/^[\-]?\d+[\.]?\d*$/",$sValue)){ return true; } break;
             case 'mail': if (preg_match("/^[\da-z\_\-\.\+]+@[\da-z_\-\.]+\.[a-z]{2,5}$/i",$sValue)){ return true; } break;
             case 'login': if (preg_match("/^[\da-z\_\-]{".$iMin.','.$iMax."}$/i",$sValue)){ return true; } break;
@@ -18,6 +19,10 @@ class Strings
             case 'password': if (mb_strlen($sValue,'UTF-8')>=$iMin){ return true; } break;
             case 'text': if (mb_strlen($sValue,'UTF-8')>=$iMin and mb_strlen($sValue,'UTF-8')<=$iMax){ return true; } break;
             case 'session': if(preg_match("/^[\da-f]{128}$/i", $sValue)){return true;} break;
+            case 'sha1': if(preg_match("/^[\da-z]{40}$/i", $sValue)) { return true; } break;
+            case 'sha512': if(preg_match("/^[\da-z]{128}$/i", $sValue)) { return true; } break;
+            case 'algorithm': if(preg_match("/^[\da-z]{" . $iMin . "}$/i", $sValue)){ return true; } break;
+            case 'phone': if(preg_match("/^\+[\+\d]+$/i", $sValue)) { return true; } break;
             default:
                 return false;
         }
