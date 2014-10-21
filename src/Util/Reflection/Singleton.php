@@ -23,4 +23,9 @@ trait Singleton
     protected function __clone() {
 
     }
+
+    static public function destruct()
+    {
+        self::$oInstance = null;
+    }
 }
