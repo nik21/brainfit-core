@@ -104,6 +104,11 @@ class Query
         return self::$dbh[$this->sServerName];
     }
 
+    public static function destruct()
+    {
+        self::$dbh = [];
+    }
+
     private function escape2($variable)
     {
         //TODO: Check long and negative numbers
