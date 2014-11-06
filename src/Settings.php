@@ -17,6 +17,8 @@ class Settings
     private static $iTTL = 0;
     private static $sVersion = '';
 
+    private static $valuesCache = null;
+
     public static function setQueryCacheImpl(\Doctrine\Common\Cache\Cache $obCache, $iTTL = 0, $sVersion = '')
     {
         self::$cache = $obCache;
@@ -29,14 +31,15 @@ class Settings
      * If you do not download the files will be loaded /config/default.yml
      *
      * @param $aConfigurationFiles
+     *
      * @throws Exception
      */
     public static function loadConfiguration($aConfigurationFiles)
     {
-        if (!is_null(self::$aConfigurationFiles))
+        if(!is_null(self::$aConfigurationFiles))
             throw new Exception('Configuration already loaded');
 
-        if (!is_array($aConfigurationFiles))
+        if(!is_array($aConfigurationFiles))
             $aConfigurationFiles = [$aConfigurationFiles];
 
         self::$aConfigurationFiles = $aConfigurationFiles;
@@ -44,35 +47,42 @@ class Settings
 
     public static function get()
     {
-        if (is_null(self::$aConfigurationFiles))
-            self::loadConfiguration(ROOT.'/config/default.yml');
-
-        //when file changes, your fetch old values
-        if (!is_null(self::$cache))
+        if(is_null(self::$valuesCache))
         {
-            $sFilenameMd5 = self::$sVersion;
-            foreach(self::$aConfigurationFiles as $sFilename)
-                $sFilenameMd5 .= md5($sFilename);
+            if(is_null(self::$aConfigurationFiles))
+                self::loadConfiguration(ROOT . '/config/default.yml');
 
-            $ret = self::$cache->fetch($sFilenameMd5);
+            //when file changes, your fetch old values
+            if(!is_null(self::$cache))
+            {
+                $sFilenameMd5 = self::$sVersion;
+                foreach (self::$aConfigurationFiles as $sFilename)
+                    $sFilenameMd5 .= md5($sFilename);
+
+                $ret = self::$cache->fetch($sFilenameMd5);
+            }
+
+            if(is_null(self::$cache) || !$ret)
+            {
+                $ret = self::getConfig(self::$aConfigurationFiles);
+
+                if(!is_null(self::$cache))
+                    self::$cache->save($sFilenameMd5, $ret, self::$iTTL);
+            }
+
+            self::$valuesCache = $ret;
         }
-
-        if (is_null(self::$cache) || !$ret)
-        {
-            $ret = self::getConfig(self::$aConfigurationFiles);
-
-            if (!is_null(self::$cache))
-                self::$cache->save($sFilenameMd5, $ret, self::$iTTL);
-        }
+        else
+            $ret = self::$valuesCache;
 
         //TODO: should be optimized
         $iNumArgs = func_num_args();
 
-        for($i=0;$i<$iNumArgs;$i++)
+        for ($i = 0; $i < $iNumArgs; $i++)
         {
             $sPath = func_get_arg($i);
 
-            if (!isset($ret[$sPath]))
+            if(!isset($ret[$sPath]))
                 return null;
 
             $ret = &$ret[$sPath];
@@ -85,7 +95,7 @@ class Settings
     {
         $ret = [];
 
-        foreach($aFiles as $sNamespace => $sFile)
+        foreach ($aFiles as $sNamespace => $sFile)
         {
             $aNamespace = is_string($sNamespace) ? explode('/', $sNamespace) : [];
 
@@ -93,23 +103,23 @@ class Settings
             {
                 $aContent = Yaml::parse(file_get_contents($sFile));
             }
-            catch(ParseException $e)
+            catch (ParseException $e)
             {
-                throw new Exception('Yaml parser error: '.$e->getMessage(), $e->getCode());
+                throw new Exception('Yaml parser error: ' . $e->getMessage(), $e->getCode());
             }
 
             //Enter namespace
             $retNamespaceChild = &$ret;
-            foreach($aNamespace as $sPath)
+            foreach ($aNamespace as $sPath)
             {
-                if (!isset($retNamespaceChild[$sPath]))
+                if(!isset($retNamespaceChild[$sPath]))
                     $retNamespaceChild[$sPath] = [];
 
                 $retNamespaceChild = &$retNamespaceChild[$sPath];
             }
 
             //assign
-            foreach($aContent as $k=>$v)
+            foreach ($aContent as $k => $v)
                 $retNamespaceChild[$k] = $v;
         }
 
