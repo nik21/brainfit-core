@@ -93,7 +93,7 @@ class InputPost implements InputInterface
                     $ret = 0;
                 if($bObligatory && !$ret)
                     throw new Exception($sErrorDescription ? $sErrorDescription :
-                        'Ibligatory empty integer positive type', $iErrorCode);
+                        'Obligatory empty integer positive type', $iErrorCode);
 
                 return $ret;
                 break;
