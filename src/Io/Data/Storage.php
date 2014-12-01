@@ -785,7 +785,7 @@ abstract class Storage
         return $ret;
     }
 
-    protected function createNewId()
+    public function createNewId()
     {
         $this->init();
 
@@ -838,7 +838,7 @@ abstract class Storage
         return $sKey;
     }
 
-    protected function getCounter()
+    public function getCounter()
     {
         $this->init();
 
@@ -854,7 +854,7 @@ abstract class Storage
      *
      * @return int
      */
-    protected function attachLeft($fieldName, $object)
+    public function attachLeft($fieldName, $object)
     {
         $this->init();
 
@@ -869,7 +869,7 @@ abstract class Storage
         return $this->redis->lPush($keyName, $fieldValue);
     }
 
-    protected function attachRight($fieldName, $object)
+    public function attachRight($fieldName, $object)
     {
         $this->init();
 
@@ -887,7 +887,7 @@ abstract class Storage
         return $this;
     }
 
-    protected function replaceListItem($fieldName, $index, $object)
+    public function replaceListItem($fieldName, $index, $object)
     {
         $this->init();
 
@@ -904,7 +904,7 @@ abstract class Storage
         return $this;
     }
 
-    protected function lRem($fieldName, $object, $count = 1)
+    public function lRem($fieldName, $object, $count = 1)
     {
         $this->init();
 
@@ -921,7 +921,7 @@ abstract class Storage
         return $this;
     }
 
-    protected function getRangeObjects($fieldName, $firstIndex = 0, $lastIndex = -1, $objectName = null)
+    public function getRangeObjects($fieldName, $firstIndex = 0, $lastIndex = -1, $objectName = null)
     {
         $this->init();
 
@@ -978,7 +978,7 @@ abstract class Storage
      *
      * @return bool Истина, если все хорошо
      */
-    protected function removeRangeObjects($fieldName, $iStart, $iStop = null)
+    public function removeRangeObjects($fieldName, $iStart, $iStop = null)
     {
         $this->init();
 
@@ -993,7 +993,7 @@ abstract class Storage
         return (bool)$this->redis->lTrim($keyName, $iStart, $iStop);
     }
 
-    protected function popObject($fieldName, $objectName = null)
+    public function popObject($fieldName, $objectName = null)
     {
         $this->init();
 
@@ -1010,7 +1010,7 @@ abstract class Storage
         return new $objectName($fieldValue);
     }
 
-    protected function getObject($fieldName, $index = 0, $objectName = null)
+    public function getObject($fieldName, $index = 0, $objectName = null)
     {
         $this->init();
 
@@ -1034,7 +1034,7 @@ abstract class Storage
      *
      * @return int
      */
-    protected function getLenght($fieldName)
+    public function getLenght($fieldName)
     {
         $this->init();
 
@@ -1110,7 +1110,7 @@ abstract class Storage
         return $this;
     }
 
-    protected function zRem($fieldName, $object)
+    public function zRem($fieldName, $object)
     {
         $this->init();
         $this->detach($fieldName, $object, true);
@@ -1134,7 +1134,7 @@ abstract class Storage
         return $this->redis->zRem($keyName, $fieldValue);
     }
 
-    protected function zRemRangeByRank($fieldName, $iStart, $iStop)
+    public function zRemRangeByRank($fieldName, $iStart, $iStop)
     {
         $this->init();
 
@@ -1143,7 +1143,7 @@ abstract class Storage
         return (int)$this->redis->zRemRangeByRank($keyName, $iStart, $iStop);
     }
 
-    protected function zRemRangeByScore($fieldName, $iMin, $iMax)
+    public function zRemRangeByScore($fieldName, $iMin, $iMax)
     {
         $this->init();
 
@@ -1152,7 +1152,7 @@ abstract class Storage
         return (int)$this->redis->zRemRangeByScore($keyName, $iMin, $iMax);
     }
 
-    protected function moveAttached($sSourceFieldName, $sDestinationFieldName, $object)
+    public function moveAttached($sSourceFieldName, $sDestinationFieldName, $object)
     {
         $this->init();
 
@@ -1171,7 +1171,7 @@ abstract class Storage
         return (bool)$this->redis->sMove($sSourceFieldName, $sDestinationFieldName, $fieldValue);
     }
 
-    protected function isMember($fieldName, $object)
+    public function isMember($fieldName, $object)
     {
         $this->init();
 
@@ -1211,7 +1211,7 @@ abstract class Storage
             return (int)$this->redis->zCard($keyName);
     }
 
-    protected function decrementField($fieldName, $iDecrement = 1)
+    public function decrementField($fieldName, $iDecrement = 1)
     {
         $this->init();
         $sKey = $this->getKeyName(array('table', $this->getCurrentId(), $fieldName));
