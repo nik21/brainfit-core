@@ -119,8 +119,11 @@ class Settings
             }
 
             //assign
-            foreach ($aContent as $k => $v)
-                $retNamespaceChild[$k] = $v;
+            if ($aContent)
+            {
+                foreach($aContent as $k => $v)
+                    $retNamespaceChild[$k] = $v;
+            }
         }
 
         return $ret;
