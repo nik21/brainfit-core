@@ -119,7 +119,7 @@ class Settings
             }
 
             //assign
-            if ($aContent)
+            if ($aContent && is_array($aContent))
             {
                 foreach($aContent as $k => $v)
                     $retNamespaceChild[$k] = $v;
