@@ -543,6 +543,9 @@ class Query
                     case 'DOUBLE':
                         $aResult[$k][$field] = floatval($aResult[$k][$field]);
                         break;
+                    case 'BIT':
+                        $aResult[$k][$field] = $aResult[$k][$field] === "\0";
+                        break;
                     case 'TIMESTAMP':
                     case 'DATE':
                     case 'DATETIME':
