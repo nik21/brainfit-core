@@ -84,6 +84,9 @@ class InputPost implements InputInterface
 
         switch($iParamType)
         {
+            case VALIDATOR_STRING:
+                return (string)$ret;
+                break;
             case VALIDATOR_INTEGER:
                 return (int)$ret;
                 break;
