@@ -13,17 +13,17 @@ class Settings
     /**
      * @var \Doctrine\Common\Cache\Cache
      */
+    private static $cacheProvider = null;
+    private static $ttl = 0;
+    private static $version = '';
     private static $cache = null;
-    private static $iTTL = 0;
-    private static $sVersion = '';
-
-    private static $valuesCache = null;
+    private static $cacheKey = null;
 
     public static function setQueryCacheImpl(\Doctrine\Common\Cache\Cache $obCache, $iTTL = 0, $sVersion = '')
     {
-        self::$cache = $obCache;
-        self::$iTTL = $iTTL;
-        self::$sVersion = $sVersion;
+        self::$cacheProvider = $obCache;
+        self::$ttl = $iTTL;
+        self::$version = $sVersion;
     }
 
     /**
@@ -45,35 +45,41 @@ class Settings
         self::$aConfigurationFiles = $aConfigurationFiles;
     }
 
+    private static function getCacheKey()
+    {
+        if (is_null(self::$cacheKey)) {
+            self::$cacheKey = self::$version;
+            foreach (self::$aConfigurationFiles as $sFilename)
+                self::$cacheKey .= md5($sFilename);
+        }
+
+        return self::$cacheKey;
+    }
+
     public static function get()
     {
-        if(is_null(self::$valuesCache))
+        if(is_null(self::$cache))
         {
             if(is_null(self::$aConfigurationFiles))
                 self::loadConfiguration(ROOT . '/config/default.yml');
 
-            //when file changes, your fetch old values
-            if(!is_null(self::$cache))
+            if(!is_null(self::$cacheProvider))
             {
-                $sFilenameMd5 = self::$sVersion;
-                foreach (self::$aConfigurationFiles as $sFilename)
-                    $sFilenameMd5 .= md5($sFilename);
-
-                $ret = self::$cache->fetch($sFilenameMd5);
+                $ret = self::$cacheProvider->fetch(self::getCacheKey());
             }
 
-            if(is_null(self::$cache) || !$ret)
+            if(is_null(self::$cacheProvider) || !$ret)
             {
                 $ret = self::getConfig(self::$aConfigurationFiles);
 
-                if(!is_null(self::$cache))
-                    self::$cache->save($sFilenameMd5, $ret, self::$iTTL);
+                if(!is_null(self::$cacheProvider))
+                    self::$cacheProvider->save(self::getCacheKey(), $ret, self::$ttl);
             }
 
-            self::$valuesCache = $ret;
+            self::$cache = $ret;
         }
         else
-            $ret = self::$valuesCache;
+            $ret = self::$cache;
 
         //TODO: should be optimized
         $iNumArgs = func_num_args();
@@ -89,6 +95,13 @@ class Settings
         }
 
         return $ret;
+    }
+
+    public static function cleanCache()
+    {
+        if(!is_null(self::$cacheProvider))
+            self::$cacheProvider->delete(self::getCacheKey());
+        self::$cache = null;
     }
 
     private static function getConfig($aFiles)
