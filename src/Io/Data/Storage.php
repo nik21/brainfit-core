@@ -236,6 +236,17 @@ abstract class Storage
         return $ret;
     }
 
+    public function sScan($fieldName, $objectName = null, &$iterator = null, $count = 100)
+    {
+        $this->init();
+        $keyName = $this->getKeyName(['table', $this->getCurrentId(), $fieldName]);
+
+        $items = $this->redis->sScan($keyName, $iterator, '', $count);
+        foreach($items as &$v)
+            $v = $this->getObjectConstructor($objectName, $v);
+        return $items;
+    }
+
     public function popAttachedObject($fieldName, $objectName = null)
     {
         $this->init();
