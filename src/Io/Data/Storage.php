@@ -762,7 +762,7 @@ abstract class Storage
             if(!isset($this->_aHashData))
                 $this->_aHashData = $this->getHashAll();
 
-            return $this->_aHashData[$fieldName];
+            return isset($this->_aHashData[$fieldName]) ? $this->_aHashData[$fieldName] : null;
         }
 
         return $value;
